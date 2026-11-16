@@ -30,6 +30,19 @@ See [build instructions](docs/BUILDING.md) for details and optional desktop prob
 ## Install
 
 Copy the built `.3dsx` and `.smdh` to `sdmc:/3ds/nfs_undercover/`.
+Prepare the game files from your supported community-modified `.n-gage` package:
+
+```sh
+python3 tools/prepare_nfsuc.py "Need for Speed Undercover.n-gage"
+```
+
+This creates `3ds/nfs_undercover/game/` in the current directory, ready to copy
+to the SD card. It uses Python 3.8+ and only the standard library; no pip packages
+are needed. All 20 files must match the verified data manifest before writing.
+Use `--output /path/to/3ds/nfs_undercover/game` to select another destination.
+On Windows, `py -3` can be used instead of `python3`.
+See [game preparation](docs/GAME_PREPARATION.md).
+
 Place the prepared game directory at `sdmc:/3ds/nfs_undercover/game/`.
 The complete installation ZIP already supplies that layout.
 Saves are created separately under `sdmc:/3ds/nfs_undercover/user/`.
@@ -38,7 +51,7 @@ Requires **New 3DS / New 3DS XL / New 2DS XL** with homebrew support.
 This source package does not contain the game executable, game archives, or saves.
 It does contain the icon and supplied bottom-screen branding needed for the build.
 Use the specific community-modified N-Gage data used by this project; stock
-protected N-Gage packages are not automatically extracted or supported here.
+protected stock N-Gage packages are not supported by the preparation tool.
 
 ## Controls
 

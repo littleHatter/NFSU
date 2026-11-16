@@ -7,6 +7,7 @@
    also included as README_MGSM_UPSTREAM.md. Existing platform code is retained.
 4. Commit the added/updated files and build with `make -C nfs_undercover -j2`.
 
+The package also includes tools/prepare_nfsuc.py and its game-file hash manifest.
 The package contains the complete NFS port sources and build artwork, not just
 a patch. It intentionally omits game archives, XE3U, saves, SDK files, generated
 executables, debug symbols, test logs and .git history. Do not upload the separate

@@ -15,3 +15,11 @@ Confirmed/rebuilt 3DSX SHA-256:
 
 The prepared game-file hashes are recorded in GAME_FILES.json. The complete
 installation ZIP additionally includes SHA256SUMS.txt for its own file contents.
+
+## Offline preparation script
+
+The Python standard-library preparation tool reproduced all 20 installation
+files from the supplied modified N-Gage package byte-for-byte. A second run was
+idempotent. An incompatible game's package was rejected before creating output.
+Six data-free parser/output regression checks passed. No runtime code or build
+artwork changed for this source-package update.

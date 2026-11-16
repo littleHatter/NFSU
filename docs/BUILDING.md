@@ -25,7 +25,14 @@ is required beyond libctru. Tested: devkitARM r68/GCC 16.1.0 and libctru 2.7.1.
 Copy the resulting nfs_undercover.3dsx and nfs_undercover.smdh into
 sdmc:/3ds/nfs_undercover/. Copy the prepared game directory from the complete
 installation package into the same directory. Keep existing user/ saves.
-There is no automatic .n-gage installer in this port.
+There is no on-console .n-gage installer. Prepare the files on your computer:
+
+```sh
+python3 tools/prepare_nfsuc.py "Need for Speed Undercover.n-gage"
+```
+
+Then copy the generated `3ds` folder to the SD card root. See
+[GAME_PREPARATION.md](GAME_PREPARATION.md) for output paths and supported input.
 
 The embedded bottom artwork is bottomscreen.png. bottom_art.h is included;
 regenerate after editing with:
