@@ -28,7 +28,7 @@ See [build instructions](docs/BUILDING.md) for details and optional desktop prob
 ## Install
 
 Copy the built `.3dsx` and `.smdh` to `sdmc:/3ds/nfs_undercover/`.
-Prepare the game files from your supported community-modified `.n-gage` package:
+Prepare the game files from your supported community-modified ("cracked") `.n-gage` package:
 
 ```sh
 python3 tools/prepare_nfsuc.py "Need for Speed Undercover.n-gage"
