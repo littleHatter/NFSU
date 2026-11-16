@@ -35,7 +35,7 @@ struct S3ERuntime::Impl {
     };std::map<U,std::shared_ptr<Decoder>> decoders;
     std::map<U,std::pair<U,U>> keyCallbacks,deviceCallbacks,pointerCallbacks;
     static constexpr U soundRate=22050,soundBlock=512,soundChannels=16;
-    struct Channel {bool playing=false,paused=false,suppressed=false;U rate=8000,volume=256,uservar=0,start=0,length=0;int32_t repeat=1,loop=0;double pos=0;std::array<U,4> fn{},ud{};};
+    struct Channel {bool playing=false,paused=false,suppressed=false;U rate=8000,volume=256,uservar=0,effectWave=0,start=0,length=0;int32_t repeat=1,loop=0;double pos=0;std::array<U,4> fn{},ud{};};
     std::array<Channel,soundChannels> channels{};U masterVolume=256,mixBuf=0,genInfo=0,endInfo=0;bool mixing=false;uint64_t audioSamples=0;U audioStart=0;bool audioStarted=false;
     std::function<void(const int16_t*,size_t,U)> audioOut;
     std::function<void(U,const int16_t*,size_t,U)> audioStemOut;
@@ -54,12 +54,39 @@ struct S3ERuntime::Impl {
 
 
     U prompts=0;
+    bool effectGenerator(U fn){return fn==G(0x4a04c31d)||fn==G(0x4a0a1e2b);}
+    U effectWave(const Channel& c){
+        // The PCM generator does not set S3E's USER_VAR. That field may still
+        // name a previous ADPCM sound on a recycled channel. IwSound's end
+        // callback owns a voice whose +0xc is the sound specification; its
+        // +0x3c is the actual wave resource. Snapshot it before playback.
+        if(c.fn[0]==G(0x4a024339)&&c.ud[0]){
+            U owner=word(c.ud[0]+0xc);if(owner)return word(owner+0x3c);
+        }
+        return c.fn[1]==G(0x4a04c31d)?c.uservar:0;
+    }
+    void guardEffectStart(){
+        // This is IwSound's start request, before channel selection, decoder reset
+        // or replacement. A null result is its existing 'no voice started' path.
+        // Compare wave resources rather than voice/channel identity: a new request
+        // can otherwise replace the decoder that is already playing this effect.
+        U sound=reg(Cpu::REG_R0);
+        if(!sound)return;
+        U wave=word(sound+0x3c);
+        if(!wave)return;
+        for(U ch=0;ch<soundChannels;++ch){const auto& c=channels[ch];
+            if(c.playing&&!c.suppressed&&effectGenerator(c.fn[1])&&c.repeat==0&&c.effectWave==wave){
+                if(traceAudio)fprintf(stdout,"[AudioStartGuard] frame=%u wave=%08x activeChannel=%u caller=%08x\n",frames,wave,ch,reg(Cpu::REG_LR));
+                finish(0);return;
+            }
+        }
+    }
     void softkeys(){
         U obj=reg(Cpu::REG_R0),left=word(obj+0x714),right=word(obj+0x710);
         call(G(0x4a076979),{left},[this,right,left](U a){
             call(G(0x4a076979),{right},[this,a,left,right](U b){
                 // The game's symbol atlas: 0=check, 1=back, 2=play, 3=X, 4=pause.
-                U next=0;for(U icon:{a,b}){if(icon==0)next|=1;if(icon==1||icon==3)next|=2;if(icon==4)next|=4;}
+                U next=0;for(U icon:{a,b}){if(icon==0||icon==2)next|=1;if(icon==1||icon==3)next|=2;if(icon==4)next|=4;}
                 if(getenv("NFS_PROMPT_TRACE")&&next!=prompts)fprintf(stdout,"[Prompts] frame=%u raw=%x,%x icons=%d,%d mask=%u\n",frames,left,right,int(a),int(b),next);
                 prompts=next;finish(0);
             });
@@ -200,11 +227,11 @@ struct S3ERuntime::Impl {
         if(n=="s3eSoundChannelRegister"||n=="s3eSoundChannelUnRegister"){if(r[0]>=soundChannels||r[1]>=4){finish(1);return;}auto& c=channels[r[0]];audioEvent(n.c_str(),r[0]);c.fn[r[1]]=n=="s3eSoundChannelRegister"?r[2]:0;c.ud[r[1]]=n=="s3eSoundChannelRegister"?r[3]:0;if(traceAudio)std::fprintf(stdout,"[Audio] %s ch=%u event=%u fn=%08x\n",n.c_str(),r[0],r[1],r[2]);finish(0);return;}
         if(n=="s3eSoundChannelSetInt"){if(r[0]>=soundChannels){finish(1);return;}auto& c=channels[r[0]];if(r[1]==1)c.rate=r[2];else if(r[1]==2)c.uservar=r[2];else if(r[1]==3)c.volume=std::min<U>(r[2],256);else if(r[1]==4)c.paused=r[2]!=0;else{finish(1);return;}finish(0);return;}
         if(n=="s3eSoundChannelGetInt"){U v=0;if(r[0]<soundChannels){auto& c=channels[r[0]];if(r[1]==0)v=c.playing;else if(r[1]==1)v=c.rate;else if(r[1]==2)v=c.uservar;else if(r[1]==3)v=c.volume;else if(r[1]==4)v=c.paused;}finish(v);return;}
-        if(n=="s3eSoundChannelPlay"){if(r[0]>=soundChannels){finish(1);return;}auto& c=channels[r[0]];c.start=r[1];c.length=r[2];c.repeat=static_cast<int32_t>(r[3]);c.loop=static_cast<int32_t>(word(reg(Cpu::REG_SP)));c.suppressed=false;
-            // NFS's short-effect decoder: one audible voice per compressed sample.
+        if(n=="s3eSoundChannelPlay"){if(r[0]>=soundChannels){finish(1);return;}auto& c=channels[r[0]];c.start=r[1];c.length=r[2];c.repeat=static_cast<int32_t>(r[3]);c.loop=static_cast<int32_t>(word(reg(Cpu::REG_SP)));c.suppressed=false;c.effectWave=effectGenerator(c.fn[1])?effectWave(c):0;
+            // NFS short-effect generators: one audible voice per identical sample.
             // Still advance every decoder and deliver its normal end callback so
             // guest sound instances/channels are released, including muted duplicates.
-            if(c.fn[1]==G(0x4a04c31d)&&c.repeat==0){
+            if(effectGenerator(c.fn[1])&&c.repeat==0){
                 for(U k=0;k<soundChannels;++k){const auto& other=channels[k];
                     if(k!=r[0]&&other.playing&&!other.paused&&!other.suppressed&&other.fn[1]==c.fn[1]&&other.start==c.start&&other.length==c.length){c.suppressed=true;break;}
                 }
@@ -249,7 +276,7 @@ struct S3ERuntime::Impl {
 };
 S3ERuntime::S3ERuntime(Cpu* c,const std::string&a,const std::string&s):p(new Impl(c,a,s)){}
 S3ERuntime::~S3ERuntime()=default;
-void S3ERuntime::Init(const std::vector<std::string>& i,const std::string& c){p->imports=i;p->parse(c);p->cpu->WriteTrampoline(TRAMPOLINE_BASE+i.size()*8,i.size());p->cpu->AddSvcHook([](Cpu* c,uint32_t,void* user){uint32_t pc=0;c->RegRead(Cpu::REG_PC,&pc);static_cast<Impl*>(user)->svc((pc-TRAMPOLINE_BASE-4)/8);},p.get());p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){static_cast<Impl*>(user)->softkeys();},p.get(),G(0x4a075a44),G(0x4a075a44));}
+void S3ERuntime::Init(const std::vector<std::string>& i,const std::string& c){p->imports=i;p->parse(c);p->cpu->WriteTrampoline(TRAMPOLINE_BASE+i.size()*8,i.size());p->cpu->AddSvcHook([](Cpu* c,uint32_t,void* user){uint32_t pc=0;c->RegRead(Cpu::REG_PC,&pc);static_cast<Impl*>(user)->svc((pc-TRAMPOLINE_BASE-4)/8);},p.get());p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){static_cast<Impl*>(user)->softkeys();},p.get(),G(0x4a075a44),G(0x4a075a44));p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){static_cast<Impl*>(user)->guardEffectStart();},p.get(),G(0x4a0554e8),G(0x4a0554e8));}
 void S3ERuntime::SetFrameCallback(std::function<void(U,const uint16_t*,Keys&)> f){p->present=std::move(f);}
 void S3ERuntime::SetPollCallback(std::function<void(Keys&)> f){p->poll=std::move(f);}
 void S3ERuntime::SetAudioCallback(std::function<void(const int16_t*,size_t,U)> f){p->audioOut=std::move(f);}

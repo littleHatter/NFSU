@@ -162,6 +162,16 @@ bool SetupSandbox(Cpu* uc, const S3EBinary& bin, uint32_t base, uint32_t heap_si
         uc->MemWrite(BASE_ADDR + fx.offset, &target, 4);
     }
 
+    // Both native and desktop backends observe this IwSound start entry.
+    // Reject other executable revisions before installing the native hook.
+    const uint8_t soundExpected[]={0xf7,0xb5,0x54,0x4c,0x05,0x00,0x00,0x29};
+    uint8_t soundActual[sizeof(soundExpected)]{};
+    uc->MemRead(BASE_ADDR+0x554e8,soundActual,sizeof(soundActual));
+    if(memcmp(soundActual,soundExpected,sizeof(soundActual))!=0){
+        std::cerr<<"[Sandbox] Unsupported sound-start revision"<<std::endl;
+        return false;
+    }
+
     // NFSUC soft-key artwork renderer. Physical key handling is elsewhere.
     // Check the original prologue before suppressing the top-screen artwork.
     // The runtime observes this entry to expose its symbols on the bottom screen.

@@ -60,3 +60,33 @@ The probe captures 320×240 PPM frames and raw signed 16-bit mono PCM at 22050 H
 NFS_LIVE_AUDIO=1 enables optional dynamically loaded SDL2 queued audio on Linux.
 This diagnostic is not a polished desktop game launcher. Its traces and captures
 are intentionally separate from the silent native release frontend.
+
+## Button and startup artwork
+
+The original PNGs are included in `nfs_undercover/artwork/`, alongside their generated
+RGBA headers. Regenerate without scaling using:
+
+```sh
+python3 nfs_undercover/generate_prompts.py
+python3 nfs_undercover/generate_startup_art.py
+```
+
+Make tracks the image and generator dependencies. Normal builds can use the supplied
+headers without installing Pillow when inputs have not changed.
+
+## Focused runtime checks
+
+```sh
+python3 nfs_undercover/tests/build_and_run.py /path/to/game
+```
+
+These test prompt mappings, ADPCM overlap suppression, independent sounds, engine
+exemption, active-wave request rejection, and real PCM sample completion with empty
+or stale USER_VAR values. They run at both stock and relocated image addresses.
+`tests/generator.bin` is a tiny synthetic ARM/Thumb test fixture, with its source in
+`tests/generator.S`; it is not game data. To regenerate it with devkitARM tools:
+
+```sh
+arm-none-eabi-as -march=armv5te nfs_undercover/tests/generator.S -o /tmp/nfs_generator.o
+arm-none-eabi-objcopy -O binary /tmp/nfs_generator.o nfs_undercover/tests/generator.bin
+```

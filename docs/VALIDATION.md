@@ -1,25 +1,27 @@
-# Release validation — 2026-11-17
+# Current release validation — 2026-11-17
 
-- User confirmed the clean-polish build on New 3DS hardware.
-- The packaged source compiled from a fresh build directory with devkitARM r68,
-  GCC 16.1.0 and libctru 2.7.1.
-- The rebuilt 3DSX matches the hardware-confirmed distributed binary byte-for-byte.
-- The optional Linux/Unicorn probe compiled and ran three startup frames with
-  the exact installation package's game files and a fresh temporary save directory.
-- Installation package contains all 20 prepared game files and no user saves.
-- Source package contains no game executable, .dz archive, saves or build outputs.
-- This is not an exhaustive full-game completion test.
+The user confirmed the current build on New 3DS hardware, including the final
+startup Loading graphic handover. Earlier confirmations covered saving, Back/Pause,
+original HUD, music/engine audio, demo timing, soft-key suppression, A/B/START prompts,
+updated icon, and the PCM impact overlap/retrigger fix.
 
-Confirmed/rebuilt 3DSX SHA-256:
-`08660092b8e87ecfa43fce9d53149c9cfd6176da2c882f657922290359ca1074`
+The PCM fix was based on hardware traces: the same 1760-sample, 8000-Hz PCM effect
+started on seven consecutive frames across seven channels before the first ended.
+The earlier ADPCM-only filters did not cover its generator; PCM USER_VAR was empty
+or stale. The current code captures wave identity from the game-owned sound voice
+and guards both effect formats before voice allocation.
 
-The prepared game-file hashes are recorded in GAME_FILES.json. The complete
-installation ZIP additionally includes SHA256SUMS.txt for its own file contents.
+Focused ARM callback tests pass at stock and relocated bases. Real PCM decoder tests
+reject seven retriggers while preserving the original decoder cursor, complete once,
+then accept the next request, with both empty and deliberately stale USER_VAR.
+Distinct sounds mix, engine voices are exempt, and completion callbacks free channels.
+The last startup presentation change leaves the confirmed audio runtime unchanged.
 
-## Offline preparation script
+The source package is rebuilt independently before delivery. Its 3DSX hash and the
+hardware-confirmed distributed build hash are recorded in RELEASE.json.
+Tested native toolchain: devkitARM r68 / GCC 16.1.0, libctru 2.7.1.
+This is not an exhaustive full-game completion test.
 
-The Python standard-library preparation tool reproduced all 20 installation
-files from the supplied modified N-Gage package byte-for-byte. A second run was
-idempotent. An incompatible game's package was rejected before creating output.
-Six data-free parser/output regression checks passed. No runtime code or build
-artwork changed for this source-package update.
+The preparation tool and GAME_FILES.json are retained. The source ZIP excludes game
+executable/archives, user saves, SDK files, built executables and diagnostic captures.
+The small synthetic generator.bin test fixture is included with its assembly source.

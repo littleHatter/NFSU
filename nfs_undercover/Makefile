@@ -25,7 +25,9 @@ $(TARGET).elf: $(OBJECTS)
 	$(CXX) $(LDFLAGS) $^ -L$(CTRULIB)/lib -lctru -lm -o $@
 $(BUILD):
 	mkdir -p $@
-$(BUILD)/main_3ds.o: bottom_art.h prompt_art.h
+$(BUILD)/main_3ds.o: bottom_art.h prompt_art.h startup_art.h
+startup_art.h: artwork/loading.png generate_startup_art.py
+	python3 generate_startup_art.py
 prompt_art.h: artwork/A.png artwork/Start.png artwork/B.png generate_prompts.py
 	python3 generate_prompts.py
 bottom_art.h: bottomscreen.png generate_bottom_art.py

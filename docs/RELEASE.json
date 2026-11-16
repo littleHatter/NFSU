@@ -1,0 +1,13 @@
+{
+  "release": "Hardware-confirmed startup loading update",
+  "date": "2026-11-17",
+  "3dsx_sha256": "1c15807819f7013f2727b0d5e21b9185b69081695a0b4fcfb7b5425bc4008b30",
+  "rebuilt_from_this_source_matches_distributed_binary": true,
+  "toolchain": {
+    "devkitARM": "r68",
+    "GCC": "16.1.0",
+    "libctru": "2.7.1"
+  },
+  "asset_root": "sdmc:/3ds/nfs_undercover/game/",
+  "save_root": "sdmc:/3ds/nfs_undercover/user/"
+}
