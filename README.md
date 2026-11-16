@@ -6,33 +6,10 @@ A native New Nintendo 3DS compatibility port of the community-modified N-Gage
 
 The original ARM game code executes directly on the New 3DS CPU. The game's
 software renderer produces the 320×240 image; the compatibility runtime handles
-files, input, audio, timers, memory and callbacks. This version uses neither a
-Symbian OS emulator nor a NovaGL/OpenGL ES translation layer.
+files, input, audio, timers, memory and callbacks. This version does not use a
+Symbian OS emulator.
 
-The clean-polish build was confirmed working by the hardware tester on
-2026-11-17, including the demo timing and removal of the remaining soft-key icon.
-This is a compatibility port, not recovered game source or a decompilation.
-
-## Audio / button prompt / icon update
-
-This revision awaits hardware confirmation. The previous clean-polish version remains
-an independent, hardware-confirmed baseline (3DSX SHA256
-`08660092b8e87ecfa43fce9d53149c9cfd6176da2c882f657922290359ca1074`).
-
-Identical simultaneous short effects have one audible copy; duplicate guest decoders
-still advance and receive end callbacks. The engine and sequenced-music generators
-are exempt. There is no global sound cooldown or volume change.
-The suppressed top-screen soft-key renderer now supplies the bottom-screen prompts:
-checkmark → A; back arrow / X → B; pause bars → Start. Supplied artwork is unscaled,
-83 / 160 / 77 pixels wide. The launcher icon is downscaled from Candidate.png.
-The executable and game data remain separate. No game resources or save files change.
-
-Focused ARM callback tests (including a relocated image) can be run on Linux with
-Python Unicorn 2.1.4 and g++:
-
-```sh
-python3 nfs_undercover/tests/build_and_run.py /path/to/game
-```
+This is a port, not a recovered game source or a decompilation.
 
 ## Build for New 3DS
 
@@ -65,13 +42,13 @@ On Windows, `py -3` can be used instead of `python3`.
 See [game preparation](docs/GAME_PREPARATION.md).
 
 Place the prepared game directory at `sdmc:/3ds/nfs_undercover/game/`.
-The complete installation ZIP already supplies that layout.
+Release zip files supply that folder layout if you don't want to make it yourself.
 Saves are created separately under `sdmc:/3ds/nfs_undercover/user/`.
 
 Requires **New 3DS / New 3DS XL / New 2DS XL** with homebrew support.
 This source package does not contain the game executable, game archives, or saves.
 It does contain the icon and supplied bottom-screen branding needed for the build.
-Use the specific community-modified N-Gage data used by this project; stock
+Use the community-modified "cracked" N-Gage data; stock
 protected stock N-Gage packages are not supported by the preparation tool.
 
 ## Controls
@@ -94,13 +71,10 @@ protected stock N-Gage packages are not supported by the preparation tool.
 - Independent sequenced-music and engine/effect mixing through NDSP.
 - 2× gain at the final 3DS PCM output, covering music and effects.
 - FAT-compatible save replacement and backup recovery.
-- Reduced sound-event stalls by suppressing routine logging and reusing mixer buffers.
-- Correct 64-bit timer return, fixing rapid attract-mode vehicle switching.
 - Dedicated soft-key artwork draw suppression, preserving physical key handling.
 - Supplied bottom-screen artwork, NFS icon and updated application metadata.
-- SELECT unassigned; HOME handling and artwork restoration retained.
 
-Normal output is silent. Runtime faults can show a bottom-screen error console.
+Runtime faults can show a bottom-screen error console.
 [Port notes](docs/PORT_NOTES.md) document the architecture, supported data and limits.
 
 ## Using this over an MGSM fork
@@ -119,7 +93,10 @@ publishers. The native CPU backend, ARM interpreter, heap and loader foundations
 come from LeithSilver's MGSM project, based on upstream revision
 `4e6d91ceadfb898322f535f82f24a394197d892b`.
 The NFS compatibility work and presentation changes were developed with ChatGPT,
-with iterative testing and artwork supplied by the project user.
+with additional modification, iterative testing and artwork done externally; as a result,
+the only real credits should go to the hard-working folk who put out the original
+game on N-Gage 2.0 and Symbian way back in the day.
+
 
 Port code is GPL version 2 or, at your option, any later version, consistent with
 MGSM. Preserve [LICENSE](LICENSE) and [third-party notices](licenses/THIRD_PARTY.txt).
