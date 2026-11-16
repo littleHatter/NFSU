@@ -1,0 +1,102 @@
+[
+  {
+    "path": "arena/config.xml",
+    "size_bytes": 3376,
+    "sha256": "830038788870b17fb19c72489629dd49bd4e639cf637bbf640c67c2baedd933e"
+  },
+  {
+    "path": "arena/game.r",
+    "size_bytes": 118,
+    "sha256": "3b8c48a7e8977a59901721a03aeb76dd04bd3c2f5b141ead66bd77b0de894357"
+  },
+  {
+    "path": "arena/game.r01",
+    "size_bytes": 118,
+    "sha256": "3b8c48a7e8977a59901721a03aeb76dd04bd3c2f5b141ead66bd77b0de894357"
+  },
+  {
+    "path": "arena/game.r02",
+    "size_bytes": 118,
+    "sha256": "3b8c48a7e8977a59901721a03aeb76dd04bd3c2f5b141ead66bd77b0de894357"
+  },
+  {
+    "path": "arena/game.r03",
+    "size_bytes": 118,
+    "sha256": "3b8c48a7e8977a59901721a03aeb76dd04bd3c2f5b141ead66bd77b0de894357"
+  },
+  {
+    "path": "arena/game.r04",
+    "size_bytes": 118,
+    "sha256": "3b8c48a7e8977a59901721a03aeb76dd04bd3c2f5b141ead66bd77b0de894357"
+  },
+  {
+    "path": "arena/game.r05",
+    "size_bytes": 118,
+    "sha256": "3b8c48a7e8977a59901721a03aeb76dd04bd3c2f5b141ead66bd77b0de894357"
+  },
+  {
+    "path": "arena/game.r29",
+    "size_bytes": 118,
+    "sha256": "3b8c48a7e8977a59901721a03aeb76dd04bd3c2f5b141ead66bd77b0de894357"
+  },
+  {
+    "path": "arena/game.r31",
+    "size_bytes": 118,
+    "sha256": "3b8c48a7e8977a59901721a03aeb76dd04bd3c2f5b141ead66bd77b0de894357"
+  },
+  {
+    "path": "arena/game.rsc",
+    "size_bytes": 118,
+    "sha256": "3b8c48a7e8977a59901721a03aeb76dd04bd3c2f5b141ead66bd77b0de894357"
+  },
+  {
+    "path": "backup_registration.xml",
+    "size_bytes": 183,
+    "sha256": "18bbfd87110fa122990cad828393568256a97f868281ff81bedd4a687af1b3bf"
+  },
+  {
+    "path": "ea_splash.jpg",
+    "size_bytes": 3478,
+    "sha256": "fefd52f7d99ebe72409ae2c0e30725258788072789d50992740fa219b3379a36"
+  },
+  {
+    "path": "nfsuc.exev",
+    "size_bytes": 6600,
+    "sha256": "cbee2aeb9fe49ba00137476eaf07e2b6eb61e77ca69a593d71470f67a4093fc9"
+  },
+  {
+    "path": "nfsuc.mmp",
+    "size_bytes": 13672,
+    "sha256": "935dd8dca6fb263331bdff41dff24c45554741f6578d3089c6dc98b5facbb86b"
+  },
+  {
+    "path": "nfsuc.xe3u",
+    "size_bytes": 827127,
+    "sha256": "549f30110c704b9d8e64e6deb0685fcb1a5051a991a5fb9bd4a92e5d789d71ac"
+  },
+  {
+    "path": "ngi_splash_land.jpg",
+    "size_bytes": 14299,
+    "sha256": "75bdc9f87847106fab8389e24859b23f2e8e1e2a302da2a6919b47477354ba89"
+  },
+  {
+    "path": "ngi_splash_port.jpg",
+    "size_bytes": 14784,
+    "sha256": "cf03a7554fcb9e538488dd5ae112d2687f24cbc17b858397b3cb6e8c965f8791"
+  },
+  {
+    "path": "overrides/0font_tacho.bmp",
+    "size_bytes": 1918,
+    "sha256": "6974715daf9107c15371f5dc7d4ebf278e8cffd890e8490dcbc52bfe7d4dca74"
+  },
+  {
+    "path": "resources-sw-tracks.dz",
+    "size_bytes": 90330,
+    "sha256": "298365e98d4be2ee4b5a1b085c0dbbee5562be32e00dac314f8054ee2acd0e60"
+  },
+  {
+    "path": "resources-sw.dz",
+    "size_bytes": 2523421,
+    "sha256": "a7f99f6023c3d052647094c517989fc3e2ba31c2f5a4b8379af0e08ed66304b7"
+  }
+]
