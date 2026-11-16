@@ -42,7 +42,7 @@ On Windows, `py -3` can be used instead of `python3`.
 See [game preparation](docs/GAME_PREPARATION.md).
 
 Place the prepared game directory at `sdmc:/3ds/nfs_undercover/game/`.
-The complete installation ZIP already supplies that layout.
+Release zip files supply that folder layout if you don't want to make it yourself.
 Saves are created separately under `sdmc:/3ds/nfs_undercover/user/`.
 
 Requires **New 3DS / New 3DS XL / New 2DS XL** with homebrew support.
