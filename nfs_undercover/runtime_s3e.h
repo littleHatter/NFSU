@@ -19,6 +19,7 @@ public:
     int Run(uint32_t entry,uint32_t maxFrames=0);
     uint32_t Frames() const;
     bool Failed() const;
+    uint32_t SoftkeyPrompts() const;
 private:
     struct Impl;std::unique_ptr<Impl> p;
 };

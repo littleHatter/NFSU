@@ -9,6 +9,7 @@
 #include "runtime_clock.h"
 #include "audio_gain.h"
 #include "bottom_art.h"
+#include "prompt_art.h"
 
 u32 __stacksize__=1024*1024;
 u32 __ctru_heap_size=12*1024*1024;
@@ -45,10 +46,20 @@ void ActivateFaultConsole(){
     }
     consoleSelect(&console);
 }
+uint32_t bottomPrompts=0;
 void DrawBottomArt(){
     if(faultConsole)return;
     u8* screen=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
     memcpy(screen,kBottomArt,sizeof(kBottomArt));
+    const unsigned widths[]={83,160,77},bits[]={1,4,2};unsigned start=0,offset=0;
+    for(unsigned p=0;p<3;++p){
+        if(bottomPrompts&bits[p])for(unsigned y=0;y<17;++y)for(unsigned x=0;x<widths[p];++x){
+            const u8* src=kPromptRgba+offset+(y*widths[p]+x)*4;
+            u8* out=screen+((start+x)*240+239-y)*3;unsigned a=src[3];
+            for(unsigned c=0;c<3;++c)out[c]=(unsigned(src[2-c])*a+unsigned(out[c])*(255-a)+127)/255;
+        }
+        start+=widths[p];offset+=widths[p]*17*4;
+    }
     GSPGPU_FlushDataCache(screen,sizeof(kBottomArt));
     gfxScreenSwapBuffers(GFX_BOTTOM,false);
 }
@@ -120,6 +131,7 @@ int main(){
                             keys[78]=(held&KEY_A)!=0;keys[210]=(held&KEY_B)!=0;keys[209]=(held&KEY_START)!=0;keys[18]=(held&KEY_X)!=0;keys[13]=(held&KEY_Y)!=0;keys[20]=(held&KEY_L)!=0;keys[22]=(held&KEY_R)!=0;
                         });
                         runtime.SetFrameCallback([&](uint32_t,const uint16_t* pixels,S3ERuntime::Keys&){
+                            if(bottomPrompts!=runtime.SoftkeyPrompts()){bottomPrompts=runtime.SoftkeyPrompts();DrawBottomArt();}
                             u8* screen=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr);memset(screen,0,400*240*3);
                             for(unsigned y=0;y<240;++y)for(unsigned x=0;x<320;++x){u16 p=pixels[y*320+x];u8* out=screen+((x+40)*240+239-y)*3;out[0]=(p&31)*255/31;out[1]=((p>>5)&63)*255/63;out[2]=((p>>11)&31)*255/31;}
                             gfxFlushBuffers();gfxScreenSwapBuffers(GFX_TOP,false);gspWaitForVBlank();

@@ -35,7 +35,7 @@ struct S3ERuntime::Impl {
     };std::map<U,std::shared_ptr<Decoder>> decoders;
     std::map<U,std::pair<U,U>> keyCallbacks,deviceCallbacks,pointerCallbacks;
     static constexpr U soundRate=22050,soundBlock=512,soundChannels=16;
-    struct Channel {bool playing=false,paused=false;U rate=8000,volume=256,uservar=0,start=0,length=0;int32_t repeat=1,loop=0;double pos=0;std::array<U,4> fn{},ud{};};
+    struct Channel {bool playing=false,paused=false,suppressed=false;U rate=8000,volume=256,uservar=0,start=0,length=0;int32_t repeat=1,loop=0;double pos=0;std::array<U,4> fn{},ud{};};
     std::array<Channel,soundChannels> channels{};U masterVolume=256,mixBuf=0,genInfo=0,endInfo=0;bool mixing=false;uint64_t audioSamples=0;U audioStart=0;bool audioStarted=false;
     std::function<void(const int16_t*,size_t,U)> audioOut;
     std::function<void(U,const int16_t*,size_t,U)> audioStemOut;
@@ -53,6 +53,18 @@ struct S3ERuntime::Impl {
     void audioEvent(const char* event,U ch){if(!traceAudio)return;std::fprintf(stdout,"[AudioEvent] record=%.6f frame=%u ms=%u event=%s ch=%u generator=%08x\n",double(audioWritten)/soundRate,frames,ms(),event,ch,ch<soundChannels?channels[ch].fn[1]:0);}
 
 
+    U prompts=0;
+    void softkeys(){
+        U obj=reg(Cpu::REG_R0),left=word(obj+0x714),right=word(obj+0x710);
+        call(G(0x4a076979),{left},[this,right,left](U a){
+            call(G(0x4a076979),{right},[this,a,left,right](U b){
+                // The game's symbol atlas: 0=check, 1=back, 2=play, 3=X, 4=pause.
+                U next=0;for(U icon:{a,b}){if(icon==0)next|=1;if(icon==1||icon==3)next|=2;if(icon==4)next|=4;}
+                if(getenv("NFS_PROMPT_TRACE")&&next!=prompts)fprintf(stdout,"[Prompts] frame=%u raw=%x,%x icons=%d,%d mask=%u\n",frames,left,right,int(a),int(b),next);
+                prompts=next;finish(0);
+            });
+        });
+    }
     std::array<U,256> keyState{};Keys desired{};
     std::function<void(U,const uint16_t*,Keys&)> present;
     uint64_t start=NfsClockMs();U lastPoll=0,lastHeartbeat=0,pollCounter=0;
@@ -103,7 +115,7 @@ struct S3ERuntime::Impl {
     }
     void updateKeys(){auto changes=std::make_shared<std::vector<std::pair<U,bool>>>();for(U k=0;k<256;++k){bool prev=keyState[k]&1,now=desired[k];keyState[k]=(now?1u:0u)|(now&&!prev?2u:0u)|(prev&&!now?4u:0u);if(prev!=now)changes->push_back({k,now});}keyStep(changes,0);}
     void keyStep(std::shared_ptr<std::vector<std::pair<U,bool>>> c,size_t at){auto cb=keyCallbacks.find(0);if(at>=c->size()||cb==keyCallbacks.end()){finish(0);return;}U p=alloc(8);word(p,(*c)[at].first);word(p+4,(*c)[at].second);auto fn=cb->second;call(fn.first,{p,fn.second},[this,c,at,p](U){heap.Free(p);keyStep(c,at+1);});}
-    void audioEnd(U ch,Done done){auto& c=channels[ch];c.playing=false;if(c.fn[0]){word(endInfo,ch);word(endInfo+4,0);call(c.fn[0],{endInfo,c.ud[0]},[done](U){done(0);});}else done(0);}
+    void audioEnd(U ch,Done done){auto& c=channels[ch];audioEvent(c.suppressed?"end-suppressed":"end",ch);c.playing=false;if(c.fn[0]){word(endInfo,ch);word(endInfo+4,0);call(c.fn[0],{endInfo,c.ud[0]},[done](U){done(0);});}else done(0);}
     void audioChannel(U ch,Done done){
         if(ch==soundChannels){auto& block=outputBlock;for(U i=0;i<soundBlock;++i)block[i]=static_cast<int16_t>(std::clamp<int64_t>(int64_t(mixAccumulator[i])*masterVolume/256,-32768,32767));if(audioStemOut)for(U ch=0;ch<soundChannels;++ch){for(auto& sample:audioStems[ch])sample=static_cast<int16_t>(int32_t(sample)*masterVolume/256);audioStemOut(ch,audioStems[ch].data(),soundBlock,soundRate);}if(audioOut)audioOut(block.data(),block.size(),soundRate);audioSamples+=soundBlock;audioWritten+=soundBlock;++mixBlocks;maxMixMs=std::max(maxMixMs,U(ms()-mixBegin));mixing=false;done(0);return;}
         auto next=[this,ch,done](U){audioChannel(ch+1,done);};auto& c=channels[ch];
@@ -113,7 +125,7 @@ struct S3ERuntime::Impl {
             // Each generator owns a clean target. Some NFS generators overwrite it
             // even when the old shared-target mix flag was set.
             zero(mixBuf,soundBlock*2);U info[9]={ch,mixBuf,soundBlock,0,c.start,c.length,static_cast<U>(c.repeat),0,0};wr(genInfo,info,sizeof(info));
-            U begin=ms();++generatorCalls;call(c.fn[1],{genInfo,c.ud[1]},[this,ch,next,begin](U){maxGeneratorMs=std::max(maxGeneratorMs,U(ms()-begin));auto& samples=channelScratch;rd(mixBuf,samples.data(),samples.size()*2);for(U i=0;i<soundBlock;++i)mixAccumulator[i]+=samples[i];if(audioStemOut)audioStems[ch].assign(samples.begin(),samples.end());if(word(genInfo+28))audioEnd(ch,next);else next(0);});return;
+            U begin=ms();++generatorCalls;call(c.fn[1],{genInfo,c.ud[1]},[this,ch,next,begin](U){maxGeneratorMs=std::max(maxGeneratorMs,U(ms()-begin));auto& samples=channelScratch;rd(mixBuf,samples.data(),samples.size()*2);if(!channels[ch].suppressed){for(U i=0;i<soundBlock;++i)mixAccumulator[i]+=samples[i];if(audioStemOut)audioStems[ch].assign(samples.begin(),samples.end());}if(word(genInfo+28))audioEnd(ch,next);else next(0);});return;
         }
         if(!c.start||!c.length){audioEnd(ch,next);return;}
         if(c.length>16u*1024*1024){fatal("invalid PCM sample length");return;}
@@ -188,7 +200,17 @@ struct S3ERuntime::Impl {
         if(n=="s3eSoundChannelRegister"||n=="s3eSoundChannelUnRegister"){if(r[0]>=soundChannels||r[1]>=4){finish(1);return;}auto& c=channels[r[0]];audioEvent(n.c_str(),r[0]);c.fn[r[1]]=n=="s3eSoundChannelRegister"?r[2]:0;c.ud[r[1]]=n=="s3eSoundChannelRegister"?r[3]:0;if(traceAudio)std::fprintf(stdout,"[Audio] %s ch=%u event=%u fn=%08x\n",n.c_str(),r[0],r[1],r[2]);finish(0);return;}
         if(n=="s3eSoundChannelSetInt"){if(r[0]>=soundChannels){finish(1);return;}auto& c=channels[r[0]];if(r[1]==1)c.rate=r[2];else if(r[1]==2)c.uservar=r[2];else if(r[1]==3)c.volume=std::min<U>(r[2],256);else if(r[1]==4)c.paused=r[2]!=0;else{finish(1);return;}finish(0);return;}
         if(n=="s3eSoundChannelGetInt"){U v=0;if(r[0]<soundChannels){auto& c=channels[r[0]];if(r[1]==0)v=c.playing;else if(r[1]==1)v=c.rate;else if(r[1]==2)v=c.uservar;else if(r[1]==3)v=c.volume;else if(r[1]==4)v=c.paused;}finish(v);return;}
-        if(n=="s3eSoundChannelPlay"){if(r[0]>=soundChannels){finish(1);return;}auto& c=channels[r[0]];c.start=r[1];c.length=r[2];c.repeat=static_cast<int32_t>(r[3]);c.loop=static_cast<int32_t>(word(reg(Cpu::REG_SP)));c.pos=0;c.playing=true;c.paused=false;if(!audioStarted){audioStarted=true;audioStart=ms();}++soundStarts;audioEvent("play",r[0]);if(traceAudio)std::fprintf(stdout,"[Audio] Play ch=%u start=%08x samples=%u repeat=%d generator=%08x\n",r[0],c.start,c.length,c.repeat,c.fn[1]);finish(0);return;}
+        if(n=="s3eSoundChannelPlay"){if(r[0]>=soundChannels){finish(1);return;}auto& c=channels[r[0]];c.start=r[1];c.length=r[2];c.repeat=static_cast<int32_t>(r[3]);c.loop=static_cast<int32_t>(word(reg(Cpu::REG_SP)));c.suppressed=false;
+            // NFS's short-effect decoder: one audible voice per compressed sample.
+            // Still advance every decoder and deliver its normal end callback so
+            // guest sound instances/channels are released, including muted duplicates.
+            if(c.fn[1]==G(0x4a04c31d)&&c.repeat==0){
+                for(U k=0;k<soundChannels;++k){const auto& other=channels[k];
+                    if(k!=r[0]&&other.playing&&!other.paused&&!other.suppressed&&other.fn[1]==c.fn[1]&&other.start==c.start&&other.length==c.length){c.suppressed=true;break;}
+                }
+            }
+            c.pos=0;c.playing=true;c.paused=false;
+            if(traceAudio&&c.suppressed)fprintf(stdout,"[AudioDedup] frame=%u ch=%u sample=%08x length=%u\n",frames,r[0],c.start,c.length);if(!audioStarted){audioStarted=true;audioStart=ms();}++soundStarts;audioEvent("play",r[0]);if(traceAudio)std::fprintf(stdout,"[Audio] Play ch=%u start=%08x samples=%u repeat=%d generator=%08x user=%08x lr=%08x\n",r[0],c.start,c.length,c.repeat,c.fn[1],c.ud[1],reg(Cpu::REG_LR));finish(0);return;}
         if(n=="s3eSoundChannelStop"||n=="s3eSoundChannelPause"||n=="s3eSoundChannelResume"){if(r[0]>=soundChannels){finish(1);return;}auto& c=channels[r[0]];audioEvent(n.c_str(),r[0]);if(n=="s3eSoundChannelStop")c.playing=c.paused=false;else c.paused=n=="s3eSoundChannelPause";finish(0);return;}
         // Compressed s3eAudio streams are still unavailable; PCM/IwSound uses the mixer above.
         if(n=="s3eAudioPlayFromBuffer"||n=="s3eAudioStop"||n=="s3eAudioPause"||n=="s3eAudioResume"){finish(1);return;}
@@ -227,7 +249,7 @@ struct S3ERuntime::Impl {
 };
 S3ERuntime::S3ERuntime(Cpu* c,const std::string&a,const std::string&s):p(new Impl(c,a,s)){}
 S3ERuntime::~S3ERuntime()=default;
-void S3ERuntime::Init(const std::vector<std::string>& i,const std::string& c){p->imports=i;p->parse(c);p->cpu->WriteTrampoline(TRAMPOLINE_BASE+i.size()*8,i.size());p->cpu->AddSvcHook([](Cpu* c,uint32_t,void* user){uint32_t pc=0;c->RegRead(Cpu::REG_PC,&pc);static_cast<Impl*>(user)->svc((pc-TRAMPOLINE_BASE-4)/8);},p.get());}
+void S3ERuntime::Init(const std::vector<std::string>& i,const std::string& c){p->imports=i;p->parse(c);p->cpu->WriteTrampoline(TRAMPOLINE_BASE+i.size()*8,i.size());p->cpu->AddSvcHook([](Cpu* c,uint32_t,void* user){uint32_t pc=0;c->RegRead(Cpu::REG_PC,&pc);static_cast<Impl*>(user)->svc((pc-TRAMPOLINE_BASE-4)/8);},p.get());p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){static_cast<Impl*>(user)->softkeys();},p.get(),G(0x4a075a44),G(0x4a075a44));}
 void S3ERuntime::SetFrameCallback(std::function<void(U,const uint16_t*,Keys&)> f){p->present=std::move(f);}
 void S3ERuntime::SetPollCallback(std::function<void(Keys&)> f){p->poll=std::move(f);}
 void S3ERuntime::SetAudioCallback(std::function<void(const int16_t*,size_t,U)> f){p->audioOut=std::move(f);}
@@ -235,3 +257,5 @@ void S3ERuntime::SetChannelAudioCallback(std::function<void(U,const int16_t*,siz
 void S3ERuntime::RequestQuit(){p->quit=true;p->cpu->Stop();}
 int S3ERuntime::Run(U e,U limit){p->limit=limit;int err=p->cpu->Start(e,0xDEADBEEF);p->reportPerformance();std::fprintf(stdout,"[S3E] End: error=%d failed=%d frame=%lu heap peak=%lu KB\n",err,p->failed,(unsigned long)p->frames,(unsigned long)(p->heap.PeakInUse()/1024));return err?err:p->failed?1:0;}
 uint32_t S3ERuntime::Frames()const{return p->frames;}bool S3ERuntime::Failed()const{return p->failed;}
+
+uint32_t S3ERuntime::SoftkeyPrompts()const{return p->prompts;}

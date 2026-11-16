@@ -163,7 +163,8 @@ bool SetupSandbox(Cpu* uc, const S3EBinary& bin, uint32_t base, uint32_t heap_si
     }
 
     // NFSUC soft-key artwork renderer. Physical key handling is elsewhere.
-    // Check the original prologue before replacing this draw-only entry with BX LR.
+    // Check the original prologue before suppressing the top-screen artwork.
+    // The runtime observes this entry to expose its symbols on the bottom screen.
     constexpr uint32_t softkeyDraw = 0x75a44;
     const uint8_t expected[] = {0xf7,0xb5,0x88,0xb0,0x08,0x98,0x07,0x21};
     uint8_t actual[sizeof(expected)]{};
