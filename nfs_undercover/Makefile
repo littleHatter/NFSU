@@ -6,7 +6,7 @@ include $(DEVKITARM)/3ds_rules
 TARGET := nfs_undercover
 BUILD := build
 APP_TITLE := Need for Speed Undercover
-APP_DESCRIPTION := N-Gage 2.0 game, ported to New 3DS
+APP_DESCRIPTION := Need for Speed Undercover
 APP_AUTHOR := NFS compatibility project
 ARCH := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 CPPFLAGS := -D__3DS__ -I. -I$(CTRULIB)/include
