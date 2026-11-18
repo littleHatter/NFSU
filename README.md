@@ -1,5 +1,7 @@
 # Need for Speed Undercover — New 3DS native port
 
+![alt text](https://github.com/littleHatter/NFSU/blob/main/screenshot.png "Need for Speed Undercover Screenshot")
+
 A native New Nintendo 3DS compatibility port of the community-modified N-Gage
 2.0 edition of **Need for Speed Undercover**, derived from
 [LeithSilver/mgsm](https://github.com/LeithSilver/mgsm).
