@@ -164,9 +164,9 @@ def console_tutorial_text(data):
         (b'Steer the car left and right using the left and right keys or 4 and 6.',
          b'Steer the car left and right by pressing Left and Right.'),
         (b'Press CENTER or 5 to activate the speedbreaker.',
-         b'Press B or X to activate the speedbreaker.'),
+         b'Press A or X to activate the speedbreaker.'),
         (b'Activate drift mode on bends by pressing CENTER or 5.',
-         b'Activate drift mode on bends by pressing B or X.'),
+         b'Activate drift mode on bends by pressing A or X.'),
         (b'Press up or 2 to activate nitro boost.', b'Press Up to activate nitro boost.'),
     ]
     for old, new in replacements:
