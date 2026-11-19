@@ -1,7 +1,6 @@
 {
-  "release": "Hardware-confirmed startup loading update",
+  "release": "3DS tutorial text and metadata consistency update",
   "date": "2026-11-17",
-  "3dsx_sha256": "1c15807819f7013f2727b0d5e21b9185b69081695a0b4fcfb7b5425bc4008b30",
   "rebuilt_from_this_source_matches_distributed_binary": true,
   "toolchain": {
     "devkitARM": "r68",
@@ -9,5 +8,9 @@
     "libctru": "2.7.1"
   },
   "asset_root": "sdmc:/3ds/nfs_undercover/game/",
-  "save_root": "sdmc:/3ds/nfs_undercover/user/"
+  "save_root": "sdmc:/3ds/nfs_undercover/user/",
+  "previous_hardware_confirmed_3dsx_sha256": "1c15807819f7013f2727b0d5e21b9185b69081695a0b4fcfb7b5425bc4008b30",
+  "3dsx_sha256": "53d62ada2311f2c31de7944002a8aaf80dccf45f36e3600e173e3f207daabd78",
+  "new_changes_hardware_verification": "pending",
+  "runtime_source_unchanged_from_confirmed_baseline": true
 }

@@ -149,10 +149,41 @@ def manifest_path():
     raise PreparationError('GAME_FILES.json is missing; keep the supplied manifest with the script.')
 
 
+def console_tutorial_text(data):
+    """Rebuild the native English string offsets; preserve unrelated text and tables."""
+    require(hashlib.sha256(data).hexdigest() == '6586feec50bdb7e2999748b9da79c34ee89a493dce830de1885b9954372733c5',
+            'Unsupported English tutorial resource.')
+    offsets = struct.unpack_from('>292H', data)
+    require(offsets[0] == 0 and all(a <= b for a, b in zip(offsets, offsets[1:])),
+            'Invalid tutorial string table.')
+    body = data[584:]
+    require(offsets[-1] <= len(body), 'Tutorial table exceeds resource.')
+    strings = [body[a:b] for a, b in zip(offsets, offsets[1:])]
+    replacements = [
+        (b'Brake by pressing the down or 8 key.', b'Brake by pressing Down.'),
+        (b'Steer the car left and right using the left and right keys or 4 and 6.',
+         b'Steer the car left and right by pressing Left and Right.'),
+        (b'Press CENTER or 5 to activate the speedbreaker.',
+         b'Press B or X to activate the speedbreaker.'),
+        (b'Activate drift mode on bends by pressing CENTER or 5.',
+         b'Activate drift mode on bends by pressing B or X.'),
+        (b'Press up or 2 to activate nitro boost.', b'Press Up to activate nitro boost.'),
+    ]
+    for old, new in replacements:
+        require(sum(text.count(old) for text in strings) == 1,
+                'Expected tutorial sentence not found exactly once.')
+        strings = [text.replace(old, new) for text in strings]
+    new_offsets = [0]
+    for text in strings:
+        new_offsets.append(new_offsets[-1] + len(text))
+    require(new_offsets[-1] <= 65535, 'Tutorial offsets exceed format limit.')
+    return struct.pack('>292H', *new_offsets) + b''.join(strings) + body[offsets[-1]:]
+
+
 def prepare(package, manifest):
     files = package_files(package)
     expected = {entry['path']: entry for entry in manifest}
-    require(len(expected) == 20, 'Unsupported game-file manifest.')
+    require(len(expected) == 21, 'Unsupported game-file manifest.')
     require('nfsuc.s3e' in files, 'No nfsuc.s3e found. This is not the supported NFS package.')
     packed = files.pop('nfsuc.s3e')
     files['nfsuc.xe3u'] = (packed if packed[:4] == b'XE3U' else
@@ -164,6 +195,7 @@ def prepare(package, manifest):
             'Unsupported resources-sw.dz. Supply the tested community-modified N-Gage edition.')
     files['overrides/0font_tacho.bmp'] = lzma_alone(
         archive[2286840:], expected['overrides/0font_tacho.bmp']['size_bytes'])
+    files['overrides/t_en'] = console_tutorial_text(lzma_alone(archive[2377709:], 14523))
     output = {}
     for name, entry in expected.items():
         path = PurePosixPath(name)

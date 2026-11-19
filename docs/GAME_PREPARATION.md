@@ -64,3 +64,5 @@ preservation:
 ```sh
 python3 -m unittest discover -s tools -p test_prepare_nfsuc.py
 ```
+
+The current manifest contains 21 files, including the 3DS tutorial text override overrides/t_en. The original archive is preserved. The English string offsets are rebuilt after replacing only the five requested tutorial sentences, and the remaining content is retained. Copy this override on updates; the executable alone does not replace tutorial text.

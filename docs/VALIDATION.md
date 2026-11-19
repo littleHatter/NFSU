@@ -25,3 +25,7 @@ This is not an exhaustive full-game completion test.
 The preparation tool and GAME_FILES.json are retained. The source ZIP excludes game
 executable/archives, user saves, SDK files, built executables and diagnostic captures.
 The small synthetic generator.bin test fixture is included with its assembly source.
+
+## Tutorial and metadata consistency update
+
+The five requested English tutorial sentences are replaced in the t_en override. The offset table is rebuilt, all other strings and the trailing marketing table are preserved, and the extraction script reproduces the verified override. The updated manifest contains 21 files. The runtime, input, save and audio source files are unchanged from the confirmed startup-loading/PCM-impact baseline. The native build and six preparation regressions pass. This update awaits hardware verification. RELEASE.json retains the previous confirmed binary hash and identifies the new packaged executable separately.
