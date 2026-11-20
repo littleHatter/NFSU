@@ -47,6 +47,9 @@ Place the prepared game directory at `sdmc:/3ds/nfs_undercover/game/`.
 Release zip files supply that folder layout if you don't want to make it yourself.
 Saves are created separately under `sdmc:/3ds/nfs_undercover/user/`.
 
+Consider using the automated extractor for preparing your game files if that sounds complicated:
+https://github.com/littleHatter/Airplay-New3DS-Game-Data-Preparation-Tool
+
 Requires **New 3DS / New 3DS XL / New 2DS XL** with homebrew support.
 This source package does not contain the game executable, game archives, or saves.
 It does contain the icon and supplied bottom-screen branding needed for the build.
