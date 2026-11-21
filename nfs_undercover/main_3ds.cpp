@@ -11,6 +11,7 @@
 #include "bottom_art.h"
 #include "prompt_art.h"
 #include "startup_art.h"
+#include "display_toggle_art.h"
 
 u32 __stacksize__=1024*1024;
 u32 __ctru_heap_size=12*1024*1024;
@@ -49,6 +50,8 @@ void ActivateFaultConsole(){
 }
 uint32_t bottomPrompts=0;
 bool startupLoading=true;
+bool wideMode=false;
+constexpr unsigned kToggleLeft=0, kToggleTop=240-kToggleHeight;
 void DrawBottomArt(){
     if(faultConsole)return;
     u8* screen=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
@@ -66,6 +69,15 @@ void DrawBottomArt(){
         const u8* src=kStartupRgba+(y*kStartupWidth+x)*4;
         u8* out=screen+((320-kStartupWidth+x)*240+239-(240-kStartupHeight+y))*3;
         unsigned a=src[3];for(unsigned c=0;c<3;++c)out[c]=(unsigned(src[2-c])*a+unsigned(out[c])*(255-a)+127)/255;
+    }
+    if(!startupLoading){
+        const u8* icon=wideMode?kSwitchToStandard:kSwitchToWide;
+        for(unsigned y=0;y<kToggleHeight;++y)for(unsigned x=0;x<kToggleWidth;++x){
+            const u8* src=icon+(y*kToggleWidth+x)*4;
+            u8* out=screen+((kToggleLeft+x)*240+239-(kToggleTop+y))*3;
+            const unsigned alpha=src[3];
+            for(unsigned c=0;c<3;++c)out[c]=(unsigned(src[2-c])*alpha+unsigned(out[c])*(255-alpha)+127)/255;
+        }
     }
     GSPGPU_FlushDataCache(screen,sizeof(kBottomArt));
     gfxScreenSwapBuffers(GFX_BOTTOM,false);
@@ -134,13 +146,23 @@ int main(){
                         puts("D-pad / Circle Pad: directions\nA: CENTER / confirm\nB: right soft key / back\nSTART: left soft key / pause\nX: keypad 5; Y: keypad 0\n");
                         runtime.SetPollCallback([&](S3ERuntime::Keys& keys){
                             keys.fill(false);if(!aptMainLoop()){runtime.RequestQuit();return;}hidScanInput();u32 held=hidKeysHeld();
+                            if(!startupLoading&&(hidKeysDown()&KEY_TOUCH)){
+                                touchPosition touch{};
+                                hidTouchRead(&touch);
+                                if(touch.px<kToggleLeft+kToggleWidth && touch.py>=kToggleTop && touch.py<240)
+                                    runtime.RequestDisplayToggle();
+                            }
                             keys[9]=(held&(KEY_DLEFT|KEY_CPAD_LEFT))!=0;keys[10]=(held&(KEY_DUP|KEY_CPAD_UP))!=0;keys[11]=(held&(KEY_DRIGHT|KEY_CPAD_RIGHT))!=0;keys[12]=(held&(KEY_DDOWN|KEY_CPAD_DOWN))!=0;
                             keys[78]=(held&KEY_A)!=0;keys[210]=(held&KEY_B)!=0;keys[209]=(held&KEY_START)!=0;keys[18]=(held&KEY_X)!=0;keys[13]=(held&KEY_Y)!=0;keys[20]=(held&KEY_L)!=0;keys[22]=(held&KEY_R)!=0;
                         });
                         runtime.SetFrameCallback([&](uint32_t,const uint16_t* pixels,S3ERuntime::Keys&){
-                            bool refreshBottom=bottomPrompts!=runtime.SoftkeyPrompts();bottomPrompts=runtime.SoftkeyPrompts();
-                            u8* screen=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr);memset(screen,0,400*240*3);
-                            for(unsigned y=0;y<240;++y)for(unsigned x=0;x<320;++x){u16 p=pixels[y*320+x];u8* out=screen+((x+40)*240+239-y)*3;out[0]=(p&31)*255/31;out[1]=((p>>5)&63)*255/63;out[2]=((p>>11)&31)*255/31;}
+                            const unsigned width=runtime.SurfaceWidth();
+                            bool refreshBottom=bottomPrompts!=runtime.SoftkeyPrompts() || wideMode!=(width==400);
+                            bottomPrompts=runtime.SoftkeyPrompts();
+                            wideMode=width==400;
+                            u8* screen=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr);if(!wideMode)memset(screen,0,400*240*3);
+                            const unsigned left=(400-width)/2;
+                            for(unsigned y=0;y<240;++y)for(unsigned x=0;x<width;++x){u16 p=pixels[y*width+x];u8* out=screen+((x+left)*240+239-y)*3;out[0]=(p&31)*255/31;out[1]=((p>>5)&63)*255/63;out[2]=((p>>11)&31)*255/31;}
                             gfxFlushBuffers();gfxScreenSwapBuffers(GFX_TOP,false);
                             // The first guest presentation is its opening Loading screen.
                             // Hand over from our startup indicator only after submitting it.

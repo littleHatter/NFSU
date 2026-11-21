@@ -32,8 +32,9 @@ int main(int argc,char**argv){
  keys.fill(false);for(const auto& e:input)if(n>=e.begin&&n<e.end)keys[e.key]=true;
  if(const char* path=std::getenv("NFS_LIVE_KEYS")){std::ifstream f(path);unsigned key;while(f>>key)if(key<256)keys[key]=true;}
  static S3ERuntime::Keys previous{};for(unsigned key=0;key<256;++key)if(keys[key]!=previous[key]){fprintf(stdout,"[Input] frame=%u key=%u down=%u\n",n,key,keys[key]?1:0);previous[key]=keys[key];}
- auto write=[&](const std::string& path){FILE*f=fopen(path.c_str(),"wb");if(!f)return;fprintf(f,"P6\n320 240\n255\n");for(unsigned i=0;i<320*240;++i){auto p=data[i];unsigned char c[3]={static_cast<unsigned char>((p>>11)*255/31),static_cast<unsigned char>(((p>>5)&63)*255/63),static_cast<unsigned char>((p&31)*255/31)};fwrite(c,1,3,f);}fclose(f);};
- write(output+"/latest.ppm");if(n<=3||n%30==0||n==frameLimit){char name[64];snprintf(name,sizeof(name),"/frame_%06u.ppm",n);write(output+name);}
+ auto write=[&](const std::string& path){FILE*f=fopen(path.c_str(),"wb");if(!f)return;const unsigned width = rt.SurfaceWidth();fprintf(f,"P6\n%u 240\n255\n",width);for(unsigned i=0;i<width*240;++i){auto p=data[i];unsigned char c[3]={static_cast<unsigned char>((p>>11)*255/31),static_cast<unsigned char>(((p>>5)&63)*255/63),static_cast<unsigned char>((p&31)*255/31)};fwrite(c,1,3,f);}fclose(f);};
+ if(std::getenv("NFS_TEST_LIVE") && (n==2440||n==2600))rt.RequestDisplayToggle();
+ write(output+"/latest.ppm");if(n<=3||n%30==0||n==2440||n==2441||n==2600||n==2601||n==frameLimit){char name[64];snprintf(name,sizeof(name),"/frame_%06u.ppm",n);write(output+name);}
  });
  int status=rt.Run(G(bin.entry_point),frameLimit);
  if(status&&!rt.Failed()){uint32_t pc=0,lr=0,sp=0;cpu->RegRead(Cpu::REG_PC,&pc);cpu->RegRead(Cpu::REG_LR,&lr);cpu->RegRead(Cpu::REG_SP,&sp);fprintf(stderr,"[Probe] CPU error %s pc=%08x lr=%08x sp=%08x\n",cpu->ErrorText(status),pc,lr,sp);for(int i=0;i<13;++i){uint32_t v=0;cpu->RegRead(i,&v);fprintf(stderr,"r%d=%08x ",i,v);}fprintf(stderr,"\n");}

@@ -25,7 +25,9 @@ $(TARGET).elf: $(OBJECTS)
 	$(CXX) $(LDFLAGS) $^ -L$(CTRULIB)/lib -lctru -lm -o $@
 $(BUILD):
 	mkdir -p $@
-$(BUILD)/main_3ds.o: bottom_art.h prompt_art.h startup_art.h
+$(BUILD)/main_3ds.o: bottom_art.h prompt_art.h startup_art.h display_toggle_art.h
+display_toggle_art.h: artwork/Switch_to_Wide.png artwork/Switch_to_Standard.png generate_display_toggle.py
+	python3 generate_display_toggle.py
 startup_art.h: artwork/loading.png generate_startup_art.py
 	python3 generate_startup_art.py
 prompt_art.h: artwork/A.png artwork/Start.png artwork/B.png generate_prompts.py

@@ -16,6 +16,8 @@ public:
     void SetAudioCallback(std::function<void(const int16_t*,size_t,uint32_t)> fn);
     void SetChannelAudioCallback(std::function<void(uint32_t,const int16_t*,size_t,uint32_t)> fn);
     void RequestQuit();
+    unsigned SurfaceWidth() const;
+    void RequestDisplayToggle();
     int Run(uint32_t entry,uint32_t maxFrames=0);
     uint32_t Frames() const;
     bool Failed() const;

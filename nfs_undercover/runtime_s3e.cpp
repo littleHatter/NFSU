@@ -187,6 +187,32 @@ struct S3ERuntime::Impl {
     void parse(const std::string& text){std::string section;bool active=true;size_t p=0;while(p<text.size()){size_t e=text.find('\n',p);std::string line=trim(text.substr(p,e==std::string::npos?e:e-p));p=e==std::string::npos?text.size():e+1;if(line.empty()||line[0]=='#'||line.rfind("//",0)==0)continue;if(line[0]=='{'){std::string cond=lower(line.substr(1,line.find('}')-1));cond.erase(std::remove_if(cond.begin(),cond.end(),[](char c){return c==' '||c=='\t';}),cond.end());active=cond.empty()||cond=="id=any"||cond=="class=any"||cond=="os=ngi"||cond=="os=symbian";continue;}if(line[0]=='['){section=lower(line.substr(1,line.find(']')-1));continue;}size_t eq=line.find('=');if(active&&eq!=std::string::npos){std::string val=trim(line.substr(eq+1));if(!val.empty()&&val[0]=='"')val=val.substr(1,val.find('"',1)-1);else val=trim(val.substr(0,val.find('#')));int64_t resolved=0;if(val.find('[')!=std::string::npos&&number(val,resolved))val=std::to_string(resolved);config[section+"/"+lower(trim(line.substr(0,eq)))]=val;}}}
     U ms(){return static_cast<U>(NfsClockMs()-start);}
     void pollHost(bool force=false){U now=ms();if(poll&&(force||U(now-lastPoll)>=16)){lastPoll=now;poll(desired);}if(U(now-lastHeartbeat)>=5000){lastHeartbeat=now;std::fprintf(stdout,"[S3E] Heartbeat ms=%lu frame=%lu calls=%llu callbacks=%lu\n",(unsigned long)now,(unsigned long)frames,(unsigned long long)calls,(unsigned long)tasks.size());}}
+    std::vector<std::pair<U,U>> surfaceCallbacks;
+    unsigned surfaceWidth = 320;
+    bool surfaceToggleRequested = false;
+    void notifySurface(const std::shared_ptr<std::vector<std::pair<U,U>>>& callbacks, size_t at, U event){
+        if(at==callbacks->size()){
+            heap.Free(event);
+            finish(0);
+            return;
+        }
+        const auto [fn,user]=(*callbacks)[at];
+        call(fn,{event,user},[this,callbacks,at,event](U){
+            notifySurface(callbacks,at+1,event);
+        });
+    }
+    bool switchSurface(){
+        if(!surfaceToggleRequested)return false;
+        surfaceToggleRequested=false;
+        if(surfaceCallbacks.empty())return false;
+        U event=alloc(20);
+        if(!event)return false;
+        surfaceWidth=surfaceWidth==320?400:320;
+        const U change[]={1,surfaceWidth,240,0,2*surfaceWidth};
+        wr(event,change,sizeof(change));
+        notifySurface(std::make_shared<std::vector<std::pair<U,U>>>(surfaceCallbacks),0,event);
+        return true;
+    }
     void svc(U index){if((++pollCounter&63u)==0)pollHost();if(quit){finish(0);cpu->Stop();return;}if(index==imports.size()){returned();return;}if(index>=imports.size()){fatal("invalid service index");return;}++calls;const std::string& n=imports[index];if(seen.insert(n).second)std::fprintf(stdout,"[S3E] Startup import %llu: %s\n",(unsigned long long)calls,n.c_str());R r{reg(0),reg(1),reg(2),reg(3)};if(getenv("NFS_DIAG")&&(n=="s3eKeyboardGetInt"||n=="s3ePointerGetInt"||n=="s3eMemorySetUserMemMgr"))fprintf(stderr,"[Capability] %s a0=%u a1=%08x a2=%08x\n",n.c_str(),r[0],r[1],r[2]);auto done=[this](U x){finish(x);};
         if(n=="s3eMalloc"||n=="s3eMallocBase"){finish(alloc(r[0]));return;}
         if(n=="s3eRealloc"||n=="s3eReallocBase"){finish(realloc_(r[0],r[1]));return;}
@@ -204,9 +230,17 @@ struct S3ERuntime::Impl {
         if(n=="s3eDeviceUnRegister"){deviceCallbacks.erase(r[0]);finish(0);return;}
         if(n=="s3eDeviceCheckQuitRequest"){finish(quit);return;}
         if(n=="s3eDeviceExit"||n=="s3eDeviceRequestQuit"){finish(0);quit=true;cpu->Stop();return;}
-        if(n=="s3eSurfaceGetInt"){finish(r[0]==0?320:r[0]==1?240:r[0]==2?640:r[0]==8?1:0);return;}
+        if(n=="s3eSurfaceRegister"){
+            if(r[0]==1 && r[1])surfaceCallbacks.emplace_back(r[1],r[2]);
+            finish(0);return;
+        }
+        if(n=="s3eSurfaceUnRegister"){
+            if(r[0]==1)surfaceCallbacks.erase(std::remove_if(surfaceCallbacks.begin(),surfaceCallbacks.end(),[&](const auto& cb){return cb.first==r[1];}),surfaceCallbacks.end());
+            finish(0);return;
+        }
+        if(n=="s3eSurfaceGetInt"){finish(r[0]==0?surfaceWidth:r[0]==1?240:r[0]==2?surfaceWidth*2:r[0]==8?1:0);return;}
         if(n=="s3eSurfacePtr"){finish(FB_BASE);return;}
-        if(n=="s3eSurfaceShow"){++frames;measureFrame();std::vector<uint16_t> image(320*240);rd(FB_BASE,image.data(),image.size()*2);if(present)present(frames,image.data(),desired);if(frames==1||frames%300==0)std::fprintf(stdout,"[S3E] Frame %lu; heap %lu KB; calls %llu\n",(unsigned long)frames,(unsigned long)(heap.BytesInUse()/1024),(unsigned long long)calls);finish(0);if(limit&&frames>=limit){quit=true;cpu->Stop();}return;}
+        if(n=="s3eSurfaceShow"){++frames;measureFrame();std::vector<uint16_t> image(surfaceWidth*240);rd(FB_BASE,image.data(),image.size()*2);if(present)present(frames,image.data(),desired);if(frames==1||frames%300==0)std::fprintf(stdout,"[S3E] Frame %lu; heap %lu KB; calls %llu\n",(unsigned long)frames,(unsigned long)(heap.BytesInUse()/1024),(unsigned long long)calls);if(!quit&&(!limit||frames<limit)&&switchSurface())return;finish(0);if(limit&&frames>=limit){quit=true;cpu->Stop();}return;}
         if(n=="s3ePointerRegister"){pointerCallbacks[r[0]]={r[1],r[2]};finish(0);return;}
         if(n=="s3ePointerUnRegister"){pointerCallbacks.erase(r[0]);finish(0);return;}
         if(n=="s3eKeyboardRegister"){keyCallbacks[r[0]]={r[1],r[2]};finish(0);return;}if(n=="s3eKeyboardUnRegister"){keyCallbacks.erase(r[0]);finish(0);return;}
@@ -270,7 +304,7 @@ struct S3ERuntime::Impl {
             svcSleepThread(r[0]?1000000:0);
 #endif
             pumpAudio([this](U){finish(0);});return;}
-        static const std::set<std::string> noops={"s3eDeviceCheckPauseRequest","s3eDeviceBacklightOn","s3eSurfaceSetup","s3eSurfaceRegister","s3eSurfaceUnRegister","s3eSoundSetInt","s3eAudioSetInt","s3eSoundChannelRegister","s3eSoundChannelUnRegister","s3eAudioRegister","s3eVibraGetInt","s3eVibraSetInt","s3eVibraVibrate","s3eVibraStop"};
+        static const std::set<std::string> noops={"s3eDeviceCheckPauseRequest","s3eDeviceBacklightOn","s3eSurfaceSetup","s3eSoundSetInt","s3eAudioSetInt","s3eSoundChannelRegister","s3eSoundChannelUnRegister","s3eAudioRegister","s3eVibraGetInt","s3eVibraSetInt","s3eVibraVibrate","s3eVibraStop"};
         if(noops.count(n)){finish(0);return;}fatal("unsupported import "+n+" caller "+std::to_string(reg(Cpu::REG_LR)));
     }
 };
@@ -286,3 +320,6 @@ int S3ERuntime::Run(U e,U limit){p->limit=limit;int err=p->cpu->Start(e,0xDEADBE
 uint32_t S3ERuntime::Frames()const{return p->frames;}bool S3ERuntime::Failed()const{return p->failed;}
 
 uint32_t S3ERuntime::SoftkeyPrompts()const{return p->prompts;}
+
+unsigned S3ERuntime::SurfaceWidth() const {return p->surfaceWidth;}
+void S3ERuntime::RequestDisplayToggle(){p->surfaceToggleRequested=true;}
