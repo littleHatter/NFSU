@@ -1,4 +1,7 @@
 #include <3ds.h>
+#include <zlib.h>
+#include "gl3ds.h"
+#include "renderer_menu_art.h"
 #include <sys/iosupport.h>
 #include <cstdio>
 #include <cstring>
@@ -14,8 +17,8 @@
 #include "display_toggle_art.h"
 
 u32 __stacksize__=1024*1024;
-u32 __ctru_heap_size=12*1024*1024;
-u32 __ctru_linear_heap_size=4*1024*1024;
+u32 __ctru_heap_size=24 * 1024 * 1024;
+u32 __ctru_linear_heap_size=20 * 1024 * 1024;
 extern "C" {
 extern char *fake_heap_start,*fake_heap_end;
 extern u32 __ctru_heap,__ctru_linear_heap;
@@ -118,6 +121,43 @@ extern "C" void ShowLogOnScreen(){ActivateFaultConsole();}
 
 int main(){
     gfxInitDefault();gfxSet3D(false);gfxSetScreenFormat(GFX_TOP,GSP_BGR8_OES);
+    gfxSetScreenFormat(GFX_BOTTOM,GSP_RGB565_OES);
+    auto* menuScreen=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
+    uLongf menuBytes=320*240*sizeof(uint16_t);
+    if(uncompress(menuScreen,&menuBytes,kRendererMenuArt,sizeof(kRendererMenuArt))!=Z_OK||
+       menuBytes!=320*240*sizeof(uint16_t)){
+        gfxExit();
+        return 1;
+    }
+    gfxFlushBuffers();
+    gfxScreenSwapBuffers(GFX_BOTTOM,false);
+    bool selected=false, hardware=false, timerPacing=false;
+    while(aptMainLoop()){
+        hidScanInput();
+        const auto keys=hidKeysDown();
+        if(keys&KEY_B)break;
+        if(keys&KEY_TOUCH){
+            touchPosition point{};
+            hidTouchRead(&point);
+            if(point.py>=120&&point.py<240&&point.px<320){
+                hardware=point.px>=160;
+                timerPacing=hardware && !(hidKeysHeld()&KEY_X);
+                selected=true;
+                break;
+            }
+        }
+        gspWaitForVBlank();
+    }
+    if(!selected){gfxExit();return 0;}
+    while(aptMainLoop()){
+        hidScanInput();
+        if(!(hidKeysHeld()&KEY_TOUCH))break;
+        gspWaitForVBlank();
+    }
+    if(!aptMainLoop()){gfxExit();return 0;}
+    if(hardware){GL3DS::SetStereo(false);GL3DS::EnableSceneReflection(true);}
+    if(timerPacing)setenv("NFS_TIMER_PACING","1",1);
+    else unsetenv("NFS_TIMER_PACING");
     gfxSetScreenFormat(GFX_BOTTOM,GSP_BGR8_OES);gfxSetDoubleBuffering(GFX_BOTTOM,false);
     originalOutput=devoptab_list[STD_OUT];originalError=devoptab_list[STD_ERR];
     quietOutput=*originalOutput;quietOutput.name="nfs_quiet";quietOutput.write_r=QuietWrite;
@@ -141,11 +181,13 @@ int main(){
                     bool pointersOK=true;for(const auto& p:binary.pointer_fixups){u32 actual=0;cpu->MemRead(G(binary.base_addr+p.offset),&actual,4);if(actual!=TRAMPOLINE_BASE+p.func_idx*8)pointersOK=false;}
                     printf("[3DS] Type-4 function pointers: %s (%u)\n",pointersOK?"verified":"FAILED",(unsigned)binary.pointer_fixups.size());
                     if(pointersOK){
-                        S3ERuntime runtime(cpu.get(),assets,std::string(ROOT)+"/user");runtime.Init(binary.imports,binary.config);
+                        S3ERuntime runtime(cpu.get(),assets,std::string(ROOT)+"/user");runtime.Init(binary.imports,binary.config,hardware);
                         Audio3DS audio;audio.Init();runtime.SetAudioCallback([&](const int16_t* p,size_t n,uint32_t rate){audio.Push(p,n,rate);});
                         puts("D-pad / Circle Pad: directions\nA: CENTER / confirm\nB: right soft key / back\nSTART: left soft key / pause\nX: keypad 5; Y: keypad 0\n");
+                        bool saveTimingRequested = false;
                         runtime.SetPollCallback([&](S3ERuntime::Keys& keys){
                             keys.fill(false);if(!aptMainLoop()){runtime.RequestQuit();return;}hidScanInput();u32 held=hidKeysHeld();
+                            saveTimingRequested |= (hidKeysDown()&KEY_SELECT)!=0;
                             if(!startupLoading&&(hidKeysDown()&KEY_TOUCH)){
                                 touchPosition touch{};
                                 hidTouchRead(&touch);
@@ -155,21 +197,57 @@ int main(){
                             keys[9]=(held&(KEY_DLEFT|KEY_CPAD_LEFT))!=0;keys[10]=(held&(KEY_DUP|KEY_CPAD_UP))!=0;keys[11]=(held&(KEY_DRIGHT|KEY_CPAD_RIGHT))!=0;keys[12]=(held&(KEY_DDOWN|KEY_CPAD_DOWN))!=0;
                             keys[78]=(held&KEY_A)!=0;keys[210]=(held&KEY_B)!=0;keys[209]=(held&KEY_START)!=0;keys[18]=(held&KEY_X)!=0;keys[13]=(held&KEY_Y)!=0;keys[20]=(held&KEY_L)!=0;keys[22]=(held&KEY_R)!=0;
                         });
-                        runtime.SetFrameCallback([&](uint32_t,const uint16_t* pixels,S3ERuntime::Keys&){
+                        const char* timingMode = hardware
+                            ? (timerPacing ? "hardware_timer" : "hardware_vblank") : "software";
+                        const std::string timingPath = std::string(ROOT) + "/timing_hud_test_" + timingMode + ".csv";
+                        u64 previousTicks = 0;
+                        struct Timing { uint32_t frame, width; u64 elapsedUs; };
+                        static Timing timings[32768];
+                        size_t timingCount = 0;
+                        const auto writeTimings = [&]{
+                            if (!timingCount) return;
+                            FILE* file = fopen(timingPath.c_str(),"w");
+                            if (!file) return;
+                            fprintf(file,"frame,width,elapsed_us\n");
+                            const size_t start = timingCount > std::size(timings)
+                                ? timingCount - std::size(timings) : 0;
+                            for(size_t i=start;i<timingCount;++i){
+                                const auto& sample = timings[i % std::size(timings)];
+                                fprintf(file,"%u,%u,%llu\n",unsigned(sample.frame),
+                                        unsigned(sample.width),static_cast<unsigned long long>(sample.elapsedUs));
+                            }
+                            fclose(file);
+                            previousTicks = 0;
+                        };
+                        runtime.SetFrameCallback([&](uint32_t frame,const uint16_t* pixels,S3ERuntime::Keys&){
                             const unsigned width=runtime.SurfaceWidth();
                             bool refreshBottom=bottomPrompts!=runtime.SoftkeyPrompts() || wideMode!=(width==400);
                             bottomPrompts=runtime.SoftkeyPrompts();
                             wideMode=width==400;
-                            u8* screen=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr);if(!wideMode)memset(screen,0,400*240*3);
-                            const unsigned left=(400-width)/2;
-                            for(unsigned y=0;y<240;++y)for(unsigned x=0;x<width;++x){u16 p=pixels[y*width+x];u8* out=screen+((x+left)*240+239-y)*3;out[0]=(p&31)*255/31;out[1]=((p>>5)&63)*255/63;out[2]=((p>>11)&31)*255/31;}
-                            gfxFlushBuffers();gfxScreenSwapBuffers(GFX_TOP,false);
+                            if(pixels && !hardware){
+                                u8* screen=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr);if(!wideMode)memset(screen,0,400*240*3);
+                                const unsigned left=(400-width)/2;
+                                for(unsigned y=0;y<240;++y)for(unsigned x=0;x<width;++x){u16 p=pixels[y*width+x];u8* out=screen+((x+left)*240+239-y)*3;out[0]=(p&31)*255/31;out[1]=((p>>5)&63)*255/63;out[2]=((p>>11)&31)*255/31;}
+                                gfxFlushBuffers();gfxScreenSwapBuffers(GFX_TOP,false);
+                            }
                             // The first guest presentation is its opening Loading screen.
                             // Hand over from our startup indicator only after submitting it.
                             if(startupLoading||refreshBottom){startupLoading=false;DrawBottomArt();}
-                            gspWaitForVBlank();
+                            if(!timerPacing)gspWaitForVBlank();
+                            const u64 now = svcGetSystemTick();
+                            if(previousTicks){
+                                const auto elapsed = static_cast<u64>((now-previousTicks) * 1000.0 / CPU_TICKS_PER_MSEC);
+                                timings[timingCount++ % std::size(timings)] = {frame,width,elapsed};
+                            }
+                            previousTicks = now;
+                            if(saveTimingRequested){
+                                saveTimingRequested = false;
+                                writeTimings();
+                            }
                         });
                         result=runtime.Run(G(binary.entry_point));
+                        writeTimings();
+                        if(hardware)GL3DS::Shutdown();
                     }
                 }
             }

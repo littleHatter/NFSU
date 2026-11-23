@@ -1,0 +1,5 @@
+The NFS application icon and bottom-screen logo are build/presentation assets.
+The bottom-screen graphic was supplied by the project user. Need for Speed,
+Undercover and associated logos/trademarks remain with their respective rights
+holders. Inclusion here does not place that artwork under the port code license.
+No commercial game executable or game archive is included in this source ZIP.

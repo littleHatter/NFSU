@@ -22,7 +22,7 @@ int main(int argc,char**argv){
  std::filesystem::create_directories(output);
  struct Input {uint32_t begin,end,key;};std::vector<Input> input;
  if(argc>5){std::ifstream f(argv[5]);Input e;while(f>>e.begin>>e.end>>e.key){if(e.key>=256||e.end<e.begin)return 2;input.push_back(e);}}
- S3ERuntime rt(cpu.get(),assets,saveDir);rt.Init(bin.imports,bin.config);
+ S3ERuntime rt(cpu.get(),assets,saveDir);rt.Init(bin.imports,bin.config,std::getenv("NFS_HW_PROBE")!=nullptr);
  DesktopAudioSink audioSink;
  std::ofstream pcm(output+"/audio_s16le_22050.raw",std::ios::binary);
  rt.SetAudioCallback([&](const int16_t* samples,size_t count,uint32_t rate){audioSink.Push(samples,count,rate);pcm.write(reinterpret_cast<const char*>(samples),count*2);});

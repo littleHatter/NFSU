@@ -41,7 +41,7 @@ It locates the Game SIS payload inside the .n-gage container, decodes its files,
 normalizes the supported private-directory paths, expands nfsuc.s3e to
 nfsuc.xe3u, and extracts the original tacho font from the verified resources-sw.dz.
 The font is copied exactly; it is not redrawn or reconstructed.
-Only the 20 expected game files are written. SIS executable/DLL installers and
+Only the 21 expected game files are written. SIS executable/DLL installers and
 metadata outside the supported private game directory are not installed.
 Every output is checked for its exact length and SHA-256 before any output is
 written. Unknown, damaged or incompatible data produces an error.
@@ -55,7 +55,7 @@ The script does not copy/build a 3DSX or fetch a game package for you.
 ## Validation
 
 The supplied community-modified .n-gage package reproduced every file of the
-hardware-confirmed complete installation, byte for byte (20 files).
+hardware-confirmed complete installation, byte for byte (21 files).
 Repeat runs passed; a Resident Evil package was rejected without creating output.
 Six data-free regression checks cover malformed SIS fields, oversized decoded
 streams, missing Game sections, conflict preflight, repeated writes and save

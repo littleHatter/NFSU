@@ -24,7 +24,7 @@ installer or general Marmalade compatibility guarantee.
 
 The native frontend uses 64 MiB of guest heap, 12 MiB of host heap, 4 MiB of
 linear memory and a 1 MiB stack. Game output is 320×240 and presented in 2D.
-Rendering is the game's own software path. NovaGL is not required by this build.
+The startup selector offers the game's software path and an OpenGL ES compatibility path backed by citro3d.
 
 ## Timer fix
 

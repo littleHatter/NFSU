@@ -2,7 +2,7 @@
 
 ## New 3DS
 
-Use devkitPro's 3ds-dev environment (devkitARM, libctru and 3DS tools). Ensure
+Use devkitPro's 3ds-dev environment (devkitARM, libctru, citro3d, 3DS zlib and 3DS tools). Ensure
 DEVKITPRO and DEVKITARM are set and the tool binaries are on PATH.
 From the repository root:
 
@@ -19,8 +19,7 @@ make -C nfs_undercover -j2
 
 This port is self-contained in nfs_undercover/ and does not use MGSM's desktop
 CMake or original mgs_native/3ds build scripts. Those scripts build Metal Gear.
-The bundled decoder builds directly; no additional graphics or audio middleware
-is required beyond libctru. Tested: devkitARM r68/GCC 16.1.0 and libctru 2.7.1.
+The bundled decoder builds directly. Hardware rendering uses citro3d. Tested: devkitARM r68/GCC 16.1.0 and libctru 2.7.1.
 
 Copy the resulting nfs_undercover.3dsx and nfs_undercover.smdh into
 sdmc:/3ds/nfs_undercover/. Copy the prepared game directory from the complete
@@ -44,12 +43,12 @@ python3 nfs_undercover/generate_bottom_art.py nfs_undercover/bottomscreen.png nf
 
 ## Optional Linux desktop diagnostic
 
-Requires a C++17 g++ compiler and Python package unicorn==2.1.4:
+Requires a C++17 g++ compiler, zlib, EGL and OpenGL development libraries, and Python package unicorn==2.1.4:
 
 ```sh
 python3 -m pip install unicorn==2.1.4
 python3 nfs_undercover/build_desktop.py
-./nfs_undercover/nfsuc_probe /path/to/game 300 /tmp/nfs-frames /tmp/nfs-test-saves
+./nfs_undercover/re_hybrid_probe /path/to/game 300 /tmp/nfs-frames /tmp/nfs-test-saves
 ```
 
 The positional arguments are game directory, frame limit, output directory,

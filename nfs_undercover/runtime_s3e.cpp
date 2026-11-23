@@ -1,3 +1,8 @@
+#include "gles.h"
+#ifdef __3DS__
+#include "gl3ds.h"
+#endif
+void InstallProbeHost();
 #include "runtime_s3e.h"
 #include "loader.h"
 #include "heap.h"
@@ -23,6 +28,23 @@ void* LAlloc(ISzAllocPtr,size_t n){return std::malloc(n);}void LFree(ISzAllocPtr
 }
 struct S3ERuntime::Impl {
     Cpu* cpu;std::string assets,saves;GuestHeap heap;std::vector<std::string> imports;
+#ifdef __3DS__
+    U cruiserBannerOwner = 0;
+
+    void observeRaceBanner() {
+        // The totaled cruiser caller composes localization IDs 141 and 142.
+        // All language variants use this same notification path.
+        cruiserBannerOwner = reg(Cpu::REG_LR) == G(0x4a083ed9) ? reg(Cpu::REG_R0) : 0;
+    }
+
+    void updateCruiserBanner() {
+        int32_t remaining = 0;
+        if (cruiserBannerOwner &&
+            (cpu->MemRead(cruiserBannerOwner + 0x6c0, &remaining, sizeof(remaining)) != 0 ||
+             remaining <= 0 || remaining > 1500)) cruiserBannerOwner = 0;
+        GL3DS::SetHideMinimap(cruiserBannerOwner != 0);
+    }
+#endif
     U secureError=0;
     std::map<std::string,std::string> config;std::array<U,3> memmgr{};
     struct File{std::vector<uint8_t> data;size_t pos=0;U backing=0;};std::map<U,File> files;
@@ -81,6 +103,51 @@ struct S3ERuntime::Impl {
             }
         }
     }
+    U playerModelRoot = 0;
+
+    U optionalWord(U address) {
+        U value = 0;
+        if (address) cpu->MemRead(address, &value, sizeof(value));
+        return value;
+    }
+
+    void trackPlayerModel() {
+        // The race player update reads its active vehicle at +0x2d4.
+        const U player = optionalWord(reg(Cpu::REG_R0) + 0x2d4);
+        const U renderState = player && optionalWord(player + 16) == 0
+            ? optionalWord(player + 0x220) : 0;
+        playerModelRoot = optionalWord(optionalWord(renderState));
+    }
+
+    void keepPlayerModelDetailed() {
+        if (surfaceWidth != 400 || !playerModelRoot || !reg(Cpu::REG_R0)) return;
+
+        // The renderable model owns a scene node. Follow its parents to
+        // scope the distance override to the active player's model tree.
+        U node = optionalWord(reg(Cpu::REG_R4) + 28);
+        for (unsigned depth = 0; node && depth < 16; ++depth) {
+            if (node == playerModelRoot) {
+                const U renderable = optionalWord(reg(Cpu::REG_SP) + 52);
+                const U modelSet = optionalWord(renderable ? renderable + 40 : 0);
+                if (!modelSet) return;
+
+                const U models = optionalWord(modelSet + 36);
+                const U count = optionalWord(modelSet + 40);
+                const U lodGroup = optionalWord(modelSet + 68);
+                const U order = lodGroup ? optionalWord(modelSet + 52) : 0;
+                if (!models || (lodGroup && !order)) return;
+
+                const U index = optionalWord(order);
+                if (index < count) {
+                    const U highModel = optionalWord(models + 4 * index);
+                    if (highModel) set(Cpu::REG_R0, highModel);
+                }
+                return;
+            }
+            node = optionalWord(node + 120);
+        }
+    }
+
     void softkeys(){
         U obj=reg(Cpu::REG_R0),left=word(obj+0x714),right=word(obj+0x710);
         call(G(0x4a076979),{left},[this,right,left](U a){
@@ -190,18 +257,19 @@ struct S3ERuntime::Impl {
     std::vector<std::pair<U,U>> surfaceCallbacks;
     unsigned surfaceWidth = 320;
     bool surfaceToggleRequested = false;
-    void notifySurface(const std::shared_ptr<std::vector<std::pair<U,U>>>& callbacks, size_t at, U event){
+    bool hardwareRenderer = false;
+    void notifySurface(const std::shared_ptr<std::vector<std::pair<U,U>>>& callbacks, size_t at, U event, U returnValue){
         if(at==callbacks->size()){
             heap.Free(event);
-            finish(0);
+            finish(returnValue);
             return;
         }
         const auto [fn,user]=(*callbacks)[at];
-        call(fn,{event,user},[this,callbacks,at,event](U){
-            notifySurface(callbacks,at+1,event);
+        call(fn,{event,user},[this,callbacks,at,event,returnValue](U){
+            notifySurface(callbacks,at+1,event,returnValue);
         });
     }
-    bool switchSurface(){
+    bool switchSurface(U returnValue=0){
         if(!surfaceToggleRequested)return false;
         surfaceToggleRequested=false;
         if(surfaceCallbacks.empty())return false;
@@ -210,10 +278,29 @@ struct S3ERuntime::Impl {
         surfaceWidth=surfaceWidth==320?400:320;
         const U change[]={1,surfaceWidth,240,0,2*surfaceWidth};
         wr(event,change,sizeof(change));
-        notifySurface(std::make_shared<std::vector<std::pair<U,U>>>(surfaceCallbacks),0,event);
+        if (hardwareRenderer) {
+            constexpr unsigned outputWidth = 400;
+            GLES::Instance().SetDisplay(surfaceWidth,240,surfaceWidth,240,outputWidth,240);
+#ifdef __3DS__
+            GL3DS::SetSceneWidth(surfaceWidth);
+#endif
+        }
+        notifySurface(std::make_shared<std::vector<std::pair<U,U>>>(surfaceCallbacks),0,event,returnValue);
         return true;
     }
-    void svc(U index){if((++pollCounter&63u)==0)pollHost();if(quit){finish(0);cpu->Stop();return;}if(index==imports.size()){returned();return;}if(index>=imports.size()){fatal("invalid service index");return;}++calls;const std::string& n=imports[index];if(seen.insert(n).second)std::fprintf(stdout,"[S3E] Startup import %llu: %s\n",(unsigned long long)calls,n.c_str());R r{reg(0),reg(1),reg(2),reg(3)};if(getenv("NFS_DIAG")&&(n=="s3eKeyboardGetInt"||n=="s3ePointerGetInt"||n=="s3eMemorySetUserMemMgr"))fprintf(stderr,"[Capability] %s a0=%u a1=%08x a2=%08x\n",n.c_str(),r[0],r[1],r[2]);auto done=[this](U x){finish(x);};
+    void svc(U index){if((++pollCounter&63u)==0)pollHost();if(quit){finish(0);cpu->Stop();return;}if(index==imports.size()){returned();return;}if(index>=imports.size()){fatal("invalid service index");return;}++calls;const std::string& n=imports[index];if(seen.insert(n).second)std::fprintf(stdout,"[S3E] Startup import %llu: %s\n",(unsigned long long)calls,n.c_str());R r{reg(0),reg(1),reg(2),reg(3)};if(getenv("NFS_DIAG")&&(n=="s3eKeyboardGetInt"||n=="s3ePointerGetInt"||n=="s3eMemorySetUserMemMgr"))fprintf(stderr,"[Capability] %s a0=%u a1=%08x a2=%08x\n",n.c_str(),r[0],r[1],r[2]);if(hardwareRenderer&&(n.rfind("gl",0)==0||n.rfind("egl",0)==0)){
+#ifdef __3DS__
+        if(n=="eglSwapBuffers") updateCruiserBanner();
+#endif
+        U ret=0;
+        if(GLES::Instance().Handle(n,cpu,r.data(),ret)){
+            if(!quit&&n=="eglSwapBuffers"&&ret&&switchSurface(ret))return;
+            finish(ret);
+            if(quit)cpu->Stop();
+            return;
+        }
+    }
+auto done=[this](U x){finish(x);};
         if(n=="s3eMalloc"||n=="s3eMallocBase"){finish(alloc(r[0]));return;}
         if(n=="s3eRealloc"||n=="s3eReallocBase"){finish(realloc_(r[0],r[1]));return;}
         if(n=="s3eFree"||n=="s3eFreeBase"){heap.Free(r[0]);finish(0);return;}
@@ -222,6 +309,8 @@ struct S3ERuntime::Impl {
         if(n=="s3eMemoryGetUserMemMgr"){wr(r[0],memmgr.data(),12);finish(0);return;}
         if(n=="s3eConfigGetInt"||n=="s3eConfigGetString"){auto i=config.find(lower(str(r[0])+"/"+str(r[1])));if(getenv("NFS_DIAG"))fprintf(stderr,"[Config] %s/%s = %s\n",str(r[0]).c_str(),str(r[1]).c_str(),i==config.end()?"<unset>":i->second.c_str());if(i==config.end()){finish(1);return;}if(n=="s3eConfigGetInt"){int64_t resolved=0;if(!number(i->second,resolved)){finish(1);return;}word(r[2],static_cast<U>(resolved));}else{auto s=i->second.substr(0,254);wr(r[2],s.c_str(),s.size()+1);}finish(0);return;}
         if(n=="s3eTimerGetMs"){uint64_t now=NfsClockMs()-start;set(1,U(now>>32));finish(U(now));return;}if(n=="s3eTimerGetInt"){finish(r[0]==0?1:0);return;}
+        if(n=="s3eGLGetNativeWindow"&&hardwareRenderer){finish(1);return;}
+        if(n=="s3eGLGetInt"&&hardwareRenderer){finish(r[0]==0?0x110:0);return;}
         if(n=="s3eAccelerometerGetInt"||n=="s3eDeviceGetInt"||n=="s3eGLGetInt"||n=="s3eAudioGetInt"||n=="s3eAudioIsCodecSupported"){finish(0);return;}
         if(n=="s3eAccelerometerStart"){finish(1);return;}
         if(n=="s3eAccelerometerStop"){finish(0);return;}
@@ -310,7 +399,64 @@ struct S3ERuntime::Impl {
 };
 S3ERuntime::S3ERuntime(Cpu* c,const std::string&a,const std::string&s):p(new Impl(c,a,s)){}
 S3ERuntime::~S3ERuntime()=default;
-void S3ERuntime::Init(const std::vector<std::string>& i,const std::string& c){p->imports=i;p->parse(c);p->cpu->WriteTrampoline(TRAMPOLINE_BASE+i.size()*8,i.size());p->cpu->AddSvcHook([](Cpu* c,uint32_t,void* user){uint32_t pc=0;c->RegRead(Cpu::REG_PC,&pc);static_cast<Impl*>(user)->svc((pc-TRAMPOLINE_BASE-4)/8);},p.get());p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){static_cast<Impl*>(user)->softkeys();},p.get(),G(0x4a075a44),G(0x4a075a44));p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){static_cast<Impl*>(user)->guardEffectStart();},p.get(),G(0x4a0554e8),G(0x4a0554e8));}
+void S3ERuntime::Init(const std::vector<std::string>& i,const std::string& c,bool hardware){p->imports=i;p->parse(c);
+    p->hardwareRenderer = hardware;
+    if(p->hardwareRenderer){
+        InstallProbeHost();
+        auto& gl=GLES::Instance();
+        gl.SetGuestAlloc([this](uint32_t size){return p->alloc(size);});
+        gl.SetDisplay(320,240,320,240,400,240);
+        gl.SetFrameCallback([this](const uint32_t* bgra,int w,int h){
+#ifdef __3DS__
+            if(!bgra){
+                ++p->frames;
+                p->measureFrame();
+                if(p->present)p->present(p->frames,nullptr,p->desired);
+                if(p->limit&&p->frames>=p->limit)p->quit=true;
+                return;
+            }
+#endif
+            if(!bgra||w<int(p->surfaceWidth)||h!=240)return;
+            ++p->frames;
+            p->measureFrame();
+            const auto width=p->surfaceWidth;
+            std::vector<uint16_t> rgb(width*h);
+            for(unsigned i=0;i<rgb.size();++i){
+                const auto px=bgra[(i/width)*w+(w-width)/2+i%width];
+                rgb[i]=((px>>8)&0xf800)|((px>>5)&0x07e0)|((px>>3)&31);
+            }
+            if(p->present)p->present(p->frames,rgb.data(),p->desired);
+            if(p->limit&&p->frames>=p->limit)p->quit=true;
+        });
+        p->config["gx/rasterisation"]="HW";
+    }
+    p->cpu->WriteTrampoline(TRAMPOLINE_BASE+i.size()*8,i.size());p->cpu->AddSvcHook([](Cpu* c,uint32_t,void* user){uint32_t pc=0;c->RegRead(Cpu::REG_PC,&pc);static_cast<Impl*>(user)->svc((pc-TRAMPOLINE_BASE-4)/8);},p.get());p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){static_cast<Impl*>(user)->softkeys();},p.get(),G(0x4a075a44),G(0x4a075a44));p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){static_cast<Impl*>(user)->guardEffectStart();},p.get(),G(0x4a0554e8),G(0x4a0554e8));
+#ifdef __3DS__
+    uint32_t bannerSignature = 0, cruiserCallSignature = 0;
+    if (p->hardwareRenderer &&
+        p->cpu->MemRead(G(0x4a080c08), &bannerSignature, sizeof(bannerSignature)) == 0 &&
+        p->cpu->MemRead(G(0x4a083ed4), &cruiserCallSignature, sizeof(cruiserCallSignature)) == 0 &&
+        bannerSignature == 0x000ab510 && cruiserCallSignature == 0xfe98f7fc) {
+        p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){
+            static_cast<Impl*>(user)->observeRaceBanner();
+        }, p.get(), G(0x4a080c08), G(0x4a080c08));
+    }
+#endif
+    // Guard the title-specific hooks against an unexpected prepared executable.
+    uint32_t updateSignature = 0;
+    uint32_t lodSignature = 0;
+    p->cpu->MemRead(G(0x4a08404c), &updateSignature, sizeof(updateSignature));
+    p->cpu->MemRead(G(0x4a05e312), &lodSignature, sizeof(lodSignature));
+    if (updateSignature == 0x0005b5f3 && lodSignature == 0xd0292800) {
+        p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){
+            static_cast<Impl*>(user)->trackPlayerModel();
+        }, p.get(), G(0x4a08404c), G(0x4a08404c));
+        p->cpu->AddCodeHook([](Cpu*,uint64_t,uint32_t,void* user){
+            static_cast<Impl*>(user)->keepPlayerModelDetailed();
+        }, p.get(), G(0x4a05e312), G(0x4a05e312));
+    }
+}
+
 void S3ERuntime::SetFrameCallback(std::function<void(U,const uint16_t*,Keys&)> f){p->present=std::move(f);}
 void S3ERuntime::SetPollCallback(std::function<void(Keys&)> f){p->poll=std::move(f);}
 void S3ERuntime::SetAudioCallback(std::function<void(const int16_t*,size_t,U)> f){p->audioOut=std::move(f);}

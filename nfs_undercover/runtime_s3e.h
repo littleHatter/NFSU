@@ -10,7 +10,7 @@ public:
     using Keys=std::array<bool,256>;
     S3ERuntime(Cpu* cpu,const std::string& assets,const std::string& saves);
     ~S3ERuntime();
-    void Init(const std::vector<std::string>& imports,const std::string& config);
+    void Init(const std::vector<std::string>& imports,const std::string& config, bool hardware = false);
     void SetFrameCallback(std::function<void(uint32_t,const uint16_t*,Keys&)> fn);
     void SetPollCallback(std::function<void(Keys&)> fn);
     void SetAudioCallback(std::function<void(const int16_t*,size_t,uint32_t)> fn);

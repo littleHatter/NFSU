@@ -1,3 +1,9 @@
+# Release validation
+
+The Cruiser Tumble Minimap Test executable was confirmed on a New 3DS. The Complete Install packages those exact bytes. See RELEASE.json for its SHA-256.
+
+## Earlier release validation
+
 # Current release validation — 2026-11-17
 
 The user confirmed the current build on New 3DS hardware, including the final

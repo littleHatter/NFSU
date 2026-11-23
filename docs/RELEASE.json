@@ -1,6 +1,6 @@
 {
-  "release": "v1.1 Live Display Toggle",
-  "date": "2026-11-21",
+  "release": "Hardware Accelerated Baseline",
+  "date": "2026-11-23",
   "toolchain": {
     "devkitARM": "r68",
     "GCC": "16.1.0",
@@ -8,8 +8,8 @@
   },
   "asset_root": "sdmc:/3ds/nfs_undercover/game/",
   "save_root": "sdmc:/3ds/nfs_undercover/user/",
-  "3dsx_sha256": "64214ee26d1f4b4343c213dadd01c353cfb8ed7ee00863657465fa62c6378f87",
-  "new_changes_hardware_verification": "User confirmed live switching works on hardware with Test 1.",
-  "exact_test_1_executable": true,
-  "prepared_files": 21
+  "3dsx_sha256": "a3837606538d54761efd01c8fe2272d75e6cb44efbb9c69031ad8254b0a35dab",
+  "new_changes_hardware_verification": "Confirmed on a New 3DS, including the cruiser tumble minimap workaround.",
+  "prepared_files": 21,
+  "exact_cruiser_tumble_test_executable": true
 }
